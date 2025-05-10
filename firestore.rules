@@ -1,0 +1,28 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Users: Allow users to read and write their own data.
+    match /users/{userId} {
+      allow read, update, delete: if request.auth != null && request.auth.uid == userId;
+      allow create: if request.auth != null; // New users can create their profile
+    }
+
+    // Creators: Allow anyone to read creator profiles.
+    // Only the authenticated user associated with the creator profile can write.
+    // Creator document ID should be the same as the user's UID.
+    match /creators/{creatorId} {
+      allow read: if true;
+      allow create, update: if request.auth != null && request.auth.uid == creatorId && request.resource.data.userId == request.auth.uid;
+      // No delete for now, handle via admin or soft delete
+    }
+
+    // Tips: Allow tipper to create. Tipper and tippee can read.
+    // No updates/deletes by users for simplicity.
+    match /tips/{tipId} {
+      allow create: if request.auth != null && request.auth.uid == request.resource.data.fromUserId;
+      allow read: if request.auth != null && (request.auth.uid == resource.data.fromUserId || request.auth.uid == resource.data.toCreatorId);
+    }
+  }
+}

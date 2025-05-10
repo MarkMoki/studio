@@ -5,17 +5,18 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { MyTipsList } from "@/components/dashboard/my-tips-list";
 import { UserProfileForm } from "@/components/dashboard/user-profile-form";
 import { CreatorStats } from "@/components/dashboard/creator-stats";
-import { ActivityFeed } from "@/components/dashboard/activity-feed";
+// ActivityFeed can be re-added later when its data source is Firebase
+// import { ActivityFeed } from "@/components/dashboard/activity-feed";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2, UserCog, Gift, BarChart3, AlertTriangle, Newspaper, Edit3, Sparkles } from "lucide-react";
+import { Loader2, UserCog, Gift, BarChart3, AlertTriangle, Edit3, Sparkles } from "lucide-react";
 
 export default function DashboardPage() {
-  const { user, loading } = useAuth();
+  const { user, loading: authLoading } = useAuth();
 
-  if (loading) {
+  if (authLoading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -59,13 +60,14 @@ export default function DashboardPage() {
         <TabsList className="grid w-full md:w-auto md:inline-flex grid-cols-2 sm:grid-cols-3 md:grid-cols-none mb-6 shadow-sm">
           {user.isCreator && <TabsTrigger value="creator-stats" className="text-sm md:text-base"><BarChart3 className="w-4 h-4 mr-2"/>Stats</TabsTrigger>}
           {user.isCreator && (
-            <TabsTrigger value="creator-profile" className="text-sm md:text-base" asChild>
-                <Link href="/dashboard/creator-profile"><Edit3 className="w-4 h-4 mr-2"/>Edit Profile</Link>
+            // This now correctly links to a separate page
+            <TabsTrigger value="creator-profile-nav" className="text-sm md:text-base" asChild> 
+                <Link href="/dashboard/creator-profile"><Edit3 className="w-4 h-4 mr-2"/>Edit Creator Profile</Link>
             </TabsTrigger>
           )}
           <TabsTrigger value="my-tips" className="text-sm md:text-base"><Gift className="w-4 h-4 mr-2"/>My Tips</TabsTrigger>
-          <TabsTrigger value="my-profile" className="text-sm md:text-base"><UserCog className="w-4 h-4 mr-2"/>Account</TabsTrigger>
-          <TabsTrigger value="activity" className="text-sm md:text-base"><Newspaper className="w-4 h-4 mr-2"/>Activity</TabsTrigger>
+          <TabsTrigger value="my-profile" className="text-sm md:text-base"><UserCog className="w-4 h-4 mr-2"/>My Account</TabsTrigger>
+          {/* <TabsTrigger value="activity" className="text-sm md:text-base"><Newspaper className="w-4 h-4 mr-2"/>Activity</TabsTrigger> */}
         </TabsList>
         
         {user.isCreator && (
@@ -74,16 +76,7 @@ export default function DashboardPage() {
           </TabsContent>
         )}
         
-        {/* Creator Profile content is now on its own page, linked by the tab trigger */}
-         {user.isCreator && (
-          <TabsContent value="creator-profile" className="animate-fade-in">
-            {/* This content will not be directly shown as the tab trigger is a Link */}
-            <p className="text-center p-8 text-muted-foreground">
-                Loading your creator profile editor... If you are not redirected, 
-                <Link href="/dashboard/creator-profile" className="text-primary hover:underline"> click here</Link>.
-            </p>
-          </TabsContent>
-        )}
+        {/* Content for creator-profile-nav is not needed here as it's a Link */}
 
 
         <TabsContent value="my-tips" className="animate-fade-in">
@@ -110,9 +103,9 @@ export default function DashboardPage() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="activity" className="animate-fade-in">
+        {/* <TabsContent value="activity" className="animate-fade-in">
           <ActivityFeed userId={user.id} />
-        </TabsContent>
+        </TabsContent> */}
       </Tabs>
     </div>
   );

@@ -1,12 +1,15 @@
-import { placeholderCreators, placeholderUsers } from '@/lib/placeholder-data';
-import type { Creator, SocialLink } from '@/types';
+
+import type { Creator } from '@/types';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { TippingModal } from '@/components/tipping/tipping-modal';
-import { Gift, Users, Palette, Music, Drama, Mic2, Link as LinkIcon, Mail, Phone, Twitter, Instagram, Facebook, Youtube, Globe, Link2 } from 'lucide-react';
+import { Gift, Users, Palette, Music, Drama, Mic2, Link as LinkIcon, Mail, Phone, Twitter, Instagram, Facebook, Youtube, Globe, Link2, AlertTriangle } from 'lucide-react';
 import Link from 'next/link';
+import { db } from '@/lib/firebase';
+import { doc, getDoc } from 'firebase/firestore';
+import { AvatarImageClient } from './avatar-image-client'; // Client component for avatar
 
 const categoryIcons: { [key: string]: React.ReactNode } = {
   Art: <Palette className="w-5 h-5 mr-2" />,
@@ -26,15 +29,30 @@ const socialIcons: { [key: string]: React.ReactNode } = {
   other: <Link2 className="w-5 h-5" />,
 };
 
-
 async function getCreator(id: string): Promise<Creator | null> {
-  await new Promise(resolve => setTimeout(resolve, 200)); 
-  const creator = placeholderCreators.find(c => c.id === id);
-  if (creator) {
-    const user = placeholderUsers.find(u => u.id === creator.userId);
-    return { ...creator, email: user?.email, phoneNumber: user?.phoneNumber };
+  try {
+    const creatorDocRef = doc(db, 'creators', id);
+    const creatorDocSnap = await getDoc(creatorDocRef);
+
+    if (creatorDocSnap.exists()) {
+      // Also fetch associated user data if needed (email, phone from users collection)
+      const creatorData = creatorDocSnap.data() as Omit<Creator, 'id'>;
+      let email, phoneNumber;
+      if (creatorData.userId) {
+        const userDocRef = doc(db, 'users', creatorData.userId);
+        const userDocSnap = await getDoc(userDocRef);
+        if (userDocSnap.exists()) {
+          email = userDocSnap.data()?.email;
+          phoneNumber = userDocSnap.data()?.phoneNumber;
+        }
+      }
+      return { id: creatorDocSnap.id, ...creatorData, email, phoneNumber };
+    }
+    return null;
+  } catch (error) {
+    console.error("Error fetching creator:", error);
+    return null; // Or throw error to be caught by Next.js error boundary
   }
-  return null;
 }
 
 export default async function CreatorProfilePage({ params }: { params: { creatorId: string } }) {
@@ -42,40 +60,43 @@ export default async function CreatorProfilePage({ params }: { params: { creator
 
   if (!creator) {
     return (
-      <div className="text-center py-10 animate-fade-in">
-        <h1 className="text-2xl font-semibold">Creator not found</h1>
-        <p className="text-muted-foreground">The creator profile you are looking for does not exist.</p>
-        <Link href="/creators" legacyBehavior>
-          <Button variant="link" className="mt-4">Back to Creators</Button>
-        </Link>
+      <div className="text-center py-20 animate-fade-in">
+        <AlertTriangle className="w-16 h-16 text-destructive mx-auto mb-6" />
+        <h1 className="text-3xl font-semibold mb-3">Creator Not Found</h1>
+        <p className="text-muted-foreground mb-6">The creator profile you are looking for does not exist or could not be loaded.</p>
+        <Button asChild variant="outline">
+          <Link href="/creators">Back to Creators</Link>
+        </Button>
       </div>
     );
   }
+  
+  const coverImageUrl = creator.coverImageUrl || `https://picsum.photos/seed/${creator.id}_cover/1200/400?grayscale&blur=2`;
 
   return (
     <div className="max-w-4xl mx-auto animate-fade-in">
-      <Card className="overflow-hidden shadow-2xl rounded-lg">
-        <div className="relative h-48 md:h-64">
+      <Card className="overflow-hidden shadow-2xl rounded-2xl">
+        <div className="relative h-56 md:h-72 group">
           <Image
-            src={creator.coverImageUrl || `https://picsum.photos/seed/${creator.id}_cover/1200/400`}
+            src={coverImageUrl}
             alt={`${creator.fullName || creator.tipHandle}'s cover photo`}
-            layout="fill"
-            objectFit="cover"
-            className="opacity-70 group-hover:opacity-100 transition-opacity duration-300"
+            fill
+            style={{ objectFit: 'cover' }}
+            className="opacity-80 group-hover:opacity-100 transition-opacity duration-300"
             data-ai-hint="abstract pattern"
             priority
           />
-           <div className="absolute inset-0 bg-gradient-to-t from-background via-transparent to-transparent opacity-50"></div>
+           <div className="absolute inset-0 bg-gradient-to-t from-background via-transparent to-transparent opacity-60"></div>
         </div>
         <CardHeader className="relative -mt-20 md:-mt-24 flex flex-col items-center text-center p-6 z-10 animate-slide-up" style={{animationDelay: '0.2s'}}>
-          <AvatarImage
+          <AvatarImageClient
             creator={creator}
-            className="w-32 h-32 md:w-40 md:h-40 rounded-full border-4 border-background shadow-lg mb-4 transform hover:scale-110 transition-transform duration-300"
+            className="w-32 h-32 md:w-40 md:h-40 rounded-full border-4 border-background bg-background shadow-lg mb-4 transform hover:scale-110 transition-transform duration-300"
           />
           <CardTitle className="text-3xl md:text-4xl font-bold">{creator.fullName || creator.tipHandle}</CardTitle>
           <CardDescription className="text-lg text-primary">{creator.tipHandle}</CardDescription>
           {creator.featured && (
-            <Badge variant="outline" className="mt-2 border-accent text-accent font-semibold animate-pulse">
+            <Badge variant="outline" className="mt-2 border-accent text-accent font-semibold animate-pulse bg-accent/10">
               ✨ Featured Creator ✨
             </Badge>
           )}
@@ -94,7 +115,7 @@ export default async function CreatorProfilePage({ params }: { params: { creator
               <h3 className="text-xl font-semibold mb-3 text-center md:text-left">Follow Me</h3>
               <div className="flex justify-center md:justify-start flex-wrap gap-3">
                 {creator.socialLinks.map((link) => (
-                  <Button key={link.platform} variant="outline" size="icon" asChild className="transform hover:scale-110 hover:border-primary transition-all duration-200">
+                  <Button key={link.platform} variant="outline" size="icon" asChild className="transform hover:scale-110 hover:border-primary transition-all duration-200 rounded-full">
                     <a href={link.url} target="_blank" rel="noopener noreferrer" aria-label={`${link.platform} profile`}>
                       {socialIcons[link.platform] || <LinkIcon className="w-5 h-5" />}
                     </a>
@@ -110,36 +131,23 @@ export default async function CreatorProfilePage({ params }: { params: { creator
               <div className="flex flex-col md:flex-row md:space-x-6 space-y-2 md:space-y-0 items-center md:justify-center">
                 {creator.email && (
                   <div className="flex items-center text-sm text-muted-foreground hover:text-primary transition-colors">
-                    <Mail className="w-4 h-4 mr-2" /> {creator.email}
+                    <Mail className="w-4 h-4 mr-2" /> <a href={`mailto:${creator.email}`}>{creator.email}</a>
                   </div>
                 )}
                 {creator.phoneNumber && (
                   <div className="flex items-center text-sm text-muted-foreground hover:text-primary transition-colors">
-                    <Phone className="w-4 h-4 mr-2" /> {creator.phoneNumber}
+                    <Phone className="w-4 h-4 mr-2" /> <span>{creator.phoneNumber}</span>
                   </div>
                 )}
               </div>
             </div>
           )}
         </CardContent>
-        <CardFooter className="p-6 bg-secondary/30 animate-slide-up" style={{animationDelay: '0.6s'}}>
+        <CardFooter className="p-6 bg-secondary/20 animate-slide-up rounded-b-2xl" style={{animationDelay: '0.6s'}}>
           <TippingModal creator={creator} />
         </CardFooter>
       </Card>
     </div>
-  );
-}
-
-function AvatarImage({ creator, className }: { creator: Creator, className?: string }) {
-  return (
-     <Image
-        src={creator.profilePicUrl || 'https://picsum.photos/seed/default-avatar/200/200'}
-        alt={`${creator.fullName || creator.tipHandle}'s profile picture`}
-        data-ai-hint="profile avatar"
-        width={160} 
-        height={160}
-        className={className}
-      />
   );
 }
 
@@ -155,8 +163,19 @@ function InfoBox({ title, value, icon }: { title: string; value: string | number
   );
 }
 
-export async function generateStaticParams() {
-  return placeholderCreators.slice(0, 3).map(creator => ({
-    creatorId: creator.id,
-  }));
-}
+// generateStaticParams can be used if you want to pre-render some popular creator pages
+// For dynamic fetching of many creators, this might not be suitable for all.
+// Example: Fetch top N creators to pre-render
+// export async function generateStaticParams() {
+//   // const creatorsCol = collection(db, 'creators');
+//   // const q = query(creatorsCol, where('active', '==', true), orderBy('totalAmountReceived', 'desc'), limit(5));
+//   // const snapshot = await getDocs(q);
+//   // return snapshot.docs.map(doc => ({
+//   //   creatorId: doc.id,
+//   // }));
+//   return []; // For now, let it be dynamic
+// }
+
+// Ensure this page is a server component (default in App Router)
+// or uses appropriate data fetching for its Next.js version.
+// For client-side interactions like the TippingModal, those are separate components.

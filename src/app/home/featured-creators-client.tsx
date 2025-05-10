@@ -1,10 +1,13 @@
+
+"use client";
 import type { Creator } from '@/types';
 import Link from 'next/link';
 import Image from 'next/image';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { ArrowRight, Palette, Music, Drama, Mic2, Users as UsersIcon } from 'lucide-react'; // Renamed Users to UsersIcon to avoid conflict
+import { ArrowRight, Palette, Music, Drama, Mic2, Users as UsersIcon } from 'lucide-react';
+import { motion } from 'framer-motion';
 
 const categoryIcons: { [key: string]: React.ReactNode } = {
   Art: <Palette className="w-4 h-4" />,
@@ -16,14 +19,20 @@ const categoryIcons: { [key: string]: React.ReactNode } = {
 
 interface CreatorCardProps {
   creator: Creator;
-  animationDelay?: string;
+  animationDelayValue: number;
 }
 
-function FeaturedCreatorCard({ creator, animationDelay }: CreatorCardProps) {
+function FeaturedCreatorCard({ creator, animationDelayValue }: CreatorCardProps) {
   return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5, delay: animationDelayValue }}
+      whileHover={{ y: -5, scale: 1.03, transition: { duration: 0.2 } }}
+      className="h-full"
+    >
     <Card 
-      className="flex flex-col h-full shadow-lg hover:shadow-2xl transition-all duration-300 ease-in-out hover:scale-105 animate-slide-up"
-      style={{ animationDelay }}
+      className="flex flex-col h-full shadow-lg hover:shadow-2xl transition-all duration-300 ease-in-out"
     >
       <CardHeader className="items-center text-center p-4">
         <Image
@@ -56,14 +65,15 @@ function FeaturedCreatorCard({ creator, animationDelay }: CreatorCardProps) {
         </Link>
       </CardFooter>
     </Card>
+    </motion.div>
   );
 }
 
-interface FeaturedCreatorsProps {
+interface FeaturedCreatorsClientProps {
   creators: Creator[];
 }
 
-export function FeaturedCreators({ creators }: FeaturedCreatorsProps) {
+export function FeaturedCreatorsClient({ creators }: FeaturedCreatorsClientProps) {
   if (!creators || creators.length === 0) {
     return null;
   }
@@ -72,29 +82,44 @@ export function FeaturedCreators({ creators }: FeaturedCreatorsProps) {
     <section className="w-full py-12 md:py-16 animate-fade-in">
       <div className="container px-4 md:px-6">
         <div className="flex flex-col items-center justify-center space-y-3 text-center mb-10">
-          <h2 className="text-3xl font-bold tracking-tighter sm:text-5xl bg-clip-text text-transparent bg-gradient-to-r from-primary to-accent">
+          <motion.h2 
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+            className="text-3xl font-bold tracking-tighter sm:text-5xl bg-clip-text text-transparent bg-gradient-to-r from-primary to-accent"
+          >
             Meet Our Stars
-          </h2>
-          <p className="max-w-[700px] text-muted-foreground md:text-xl/relaxed lg:text-base/relaxed xl:text-xl/relaxed">
+          </motion.h2>
+          <motion.p 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.5, delay: 0.2 }}
+            className="max-w-[700px] text-muted-foreground md:text-xl/relaxed lg:text-base/relaxed xl:text-xl/relaxed"
+          >
             Discover some of the most talented and inspiring creators on TipKesho.
-          </p>
+          </motion.p>
         </div>
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
           {creators.map((creator, index) => (
             <FeaturedCreatorCard 
               key={creator.id} 
               creator={creator} 
-              animationDelay={`${0.2 + index * 0.1}s`}
+              animationDelayValue={0.2 + index * 0.1}
             />
           ))}
         </div>
-        <div className="text-center mt-10">
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.5 + creators.length * 0.1 }}
+          className="text-center mt-10"
+        >
             <Link href="/creators" passHref legacyBehavior>
                 <Button size="lg" variant="outline" className="transform hover:scale-105 transition-transform">
                     Explore All Creators <ArrowRight className="ml-2 h-5 w-5" />
                 </Button>
             </Link>
-        </div>
+        </motion.div>
       </div>
     </section>
   );

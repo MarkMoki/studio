@@ -2,6 +2,7 @@ import { mockTestimonials } from "@/lib/placeholder-data";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Star, Quote } from "lucide-react";
+import type { Testimonial } from "@/lib/placeholder-data"; // Import the type
 
 export function Testimonials() {
   if (!mockTestimonials || mockTestimonials.length === 0) {
@@ -20,7 +21,7 @@ export function Testimonials() {
           </p>
         </div>
         <div className="grid grid-cols-1 gap-8 md:grid-cols-2 lg:grid-cols-3">
-          {mockTestimonials.map((testimonial, index) => (
+          {mockTestimonials.map((testimonial: Testimonial, index: number) => (
             <Card 
               key={testimonial.id} 
               className="shadow-lg hover:shadow-2xl transition-all duration-300 ease-in-out hover:-translate-y-2 animate-slide-up"
@@ -30,7 +31,7 @@ export function Testimonials() {
                 <div className="flex items-center space-x-4">
                   <Avatar className="h-12 w-12 border-2 border-primary">
                     <AvatarImage src={testimonial.avatar} alt={testimonial.name} data-ai-hint={testimonial.dataAiHint} />
-                    <AvatarFallback>{testimonial.name.substring(0, 2)}</AvatarFallback>
+                    <AvatarFallback>{testimonial.name.substring(0, 2).toUpperCase()}</AvatarFallback>
                   </Avatar>
                   <div>
                     <h3 className="font-semibold text-lg">{testimonial.name}</h3>
