@@ -1,3 +1,4 @@
+
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ArrowRight, Gift, Zap, MessageSquareHeart, Users, Sparkles } from "lucide-react";
@@ -62,7 +63,7 @@ export default function HomePage() {
                     Discover Creators <ArrowRight className="ml-2 h-5 w-5" />
                   </Button>
                 </Link>
-                <Link href="/auth/signup" legacyBehavior>
+                <Link href="/auth" legacyBehavior>
                   <Button size="lg" variant="outline" className="shadow-md hover:shadow-lg transform hover:scale-105 transition-all duration-300">
                     Sign Up & Shine
                   </Button>
@@ -139,7 +140,7 @@ export default function HomePage() {
                   Explore Creators
                 </Button>
               </Link>
-              <Link href="/auth/signup" legacyBehavior>
+              <Link href="/auth" legacyBehavior>
                  <Button size="lg" variant="outline" className="border-primary-foreground text-primary-foreground hover:bg-primary-foreground hover:text-primary shadow-md hover:shadow-lg transform hover:scale-105 transition-all duration-300">
                   Join as a Creator
                 </Button>

@@ -1,3 +1,4 @@
+
 "use client";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -29,7 +30,7 @@ export default function DashboardPage() {
          <AlertTriangle className="h-16 w-16 text-destructive mb-4" />
         <h1 className="text-2xl font-semibold mb-2">Access Denied</h1>
         <p className="text-muted-foreground mb-6">Please sign in to view your dashboard.</p>
-        <Link href="/auth/signin" passHref legacyBehavior>
+        <Link href="/auth" passHref legacyBehavior>
           <Button className="bg-primary hover:bg-primary/90 text-primary-foreground transform hover:scale-105 transition-transform">Sign In</Button>
         </Link>
       </div>

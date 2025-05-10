@@ -1,3 +1,4 @@
+
 "use client";
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -81,12 +82,12 @@ export function Navbar() {
             </DropdownMenu>
           ) : (
             <>
-              <Link href="/auth/signin" passHref legacyBehavior>
+              <Link href="/auth" passHref legacyBehavior>
                 <Button variant="ghost" size="sm" className="hover:text-primary">
                   <LogIn className="mr-2 h-4 w-4" /> Sign In
                 </Button>
               </Link>
-              <Link href="/auth/signup" passHref legacyBehavior>
+              <Link href="/auth" passHref legacyBehavior>
                 <Button size="sm" className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-md hover:shadow-lg transform hover:scale-105 transition-all">
                   <UserPlus className="mr-2 h-4 w-4" /> Sign Up
                 </Button>

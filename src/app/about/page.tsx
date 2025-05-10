@@ -1,3 +1,4 @@
+
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { HeartHandshake, Lightbulb, Users, TrendingUp } from "lucide-react";
@@ -87,7 +88,7 @@ export default function AboutPage() {
               Discover Creators
             </Button>
           </Link>
-          <Link href="/auth/signup" passHref legacyBehavior>
+          <Link href="/auth" passHref legacyBehavior>
             <Button size="lg" variant="outline" className="transform hover:scale-105 transition-transform">
               Sign Up
             </Button>

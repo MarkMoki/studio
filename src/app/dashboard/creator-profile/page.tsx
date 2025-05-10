@@ -1,3 +1,4 @@
+
 "use client";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -26,7 +27,7 @@ export default function CreatorProfileManagementPage() {
         <h1 className="mt-4 text-2xl font-semibold">Access Denied</h1>
         <p className="mt-2 text-muted-foreground">You must be signed in to manage a creator profile.</p>
         <Button asChild className="mt-6">
-          <Link href="/auth/signin">Sign In</Link>
+          <Link href="/auth">Sign In</Link>
         </Button>
       </div>
     );
