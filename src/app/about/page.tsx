@@ -1,9 +1,10 @@
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { HeartHandshake, Lightbulb, Users, TrendingUp } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
+import { cn } from "@/lib/utils";
 
 export default function AboutPage() {
   const teamMembers = [
@@ -83,15 +84,23 @@ export default function AboutPage() {
           Whether you&apos;re a creator ready to share your gift, or a fan eager to support, TipKesho is your stage.
         </p>
         <div className="flex justify-center gap-4">
-          <Link href="/creators" passHref legacyBehavior>
-            <Button size="lg" className="bg-primary hover:bg-primary/90 text-primary-foreground transform hover:scale-105 transition-transform">
-              Discover Creators
-            </Button>
+          <Link 
+            href="/creators" 
+            className={cn(
+                buttonVariants({ size: "lg" }),
+                "bg-primary hover:bg-primary/90 text-primary-foreground transform hover:scale-105 transition-transform"
+            )}
+          >
+            Discover Creators
           </Link>
-          <Link href="/auth" passHref legacyBehavior>
-            <Button size="lg" variant="outline" className="transform hover:scale-105 transition-transform">
-              Sign Up
-            </Button>
+          <Link 
+            href="/auth" 
+            className={cn(
+                buttonVariants({ size: "lg", variant: "outline" }),
+                "transform hover:scale-105 transition-transform"
+            )}
+          >
+            Sign Up
           </Link>
         </div>
       </section>

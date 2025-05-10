@@ -1,24 +1,46 @@
-rules_version = '2';
 
 service firebase.storage {
   match /b/{bucket}/o {
-    // User profile pictures: users/{userId}/profile.{jpg|png|jpeg}
-    match /users/{userId}/profile.{extension} where extension in ['jpg', 'png', 'jpeg'] {
-      allow read: if true; // Publicly readable
-      allow write: if request.auth != null && request.auth.uid == userId && request.resource.size < 2 * 1024 * 1024; // Max 2MB
+
+    // Custom function to check user ownership
+    function isUser(userId) {
+      return request.auth != null && request.auth.uid == userId;
     }
 
-    // Creator cover images: creators/{creatorId}/cover.{jpg|png|jpeg}
-    // Assuming creatorId is the same as userId
-    match /creators/{creatorId}/cover.{extension} where extension in ['jpg', 'png', 'jpeg'] {
-      allow read: if true; // Publicly readable
-      allow write: if request.auth != null && request.auth.uid == creatorId && request.resource.size < 5 * 1024 * 1024; // Max 5MB
+    // Custom function to check size limit in bytes
+    function isUnderSizeLimit(maxBytes) {
+      return request.resource.size < maxBytes;
+    }
+
+    // Profile images (2MB max)
+    // Path should match how files are uploaded in the app code.
+    // e.g., users/{userId}/profile.{extension} or users/{userId}/profilePic
+    match /users/{userId}/profile.{extension} {
+      allow read: if true;
+      allow write: if isUser(userId) && isUnderSizeLimit(2 * 1024 * 1024);
+    }
+     match /users/{userId}/profile/{fileName} { // More generic to catch any file in profile folder
+      allow read: if true;
+      allow write: if isUser(userId) && isUnderSizeLimit(2 * 1024 * 1024);
+    }
+
+
+    // Creator cover images (5MB max)
+    // Path should match upload path. e.g., creators/{creatorId}/cover.{extension}
+    match /creators/{creatorId}/cover.{extension} {
+      allow read: if true;
+      allow write: if isUser(creatorId) && isUnderSizeLimit(5 * 1024 * 1024);
+    }
+    match /creators/{creatorId}/cover/{fileName} { // More generic
+      allow read: if true;
+      allow write: if isUser(creatorId) && isUnderSizeLimit(5 * 1024 * 1024);
     }
     
-    // Deny all other writes by default
+
+    // Deny all other paths by default if not explicitly allowed
+    // It's good practice to uncomment this for production.
     // match /{allPaths=**} {
-    //   allow read, write: if false; 
+    //   allow read, write: if false;
     // }
-    // Be careful with default deny, ensure your paths are covered or add specific rules.
   }
 }

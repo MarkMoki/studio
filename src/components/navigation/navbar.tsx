@@ -1,7 +1,7 @@
 
 "use client";
 import Link from 'next/link';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Home, Users, LayoutDashboard, LogIn, UserPlus, HandCoins, Sparkles } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import {
@@ -13,6 +13,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { cn } from "@/lib/utils";
 
 export function Navbar() {
   const { user, loading, signOut } = useAuth();
@@ -82,15 +83,23 @@ export function Navbar() {
             </DropdownMenu>
           ) : (
             <>
-              <Link href="/auth" passHref legacyBehavior>
-                <Button variant="ghost" size="sm" className="hover:text-primary">
-                  <LogIn className="mr-2 h-4 w-4" /> Sign In
-                </Button>
+              <Link 
+                href="/auth" 
+                className={cn(
+                  buttonVariants({ variant: "ghost", size: "sm" }),
+                  "hover:text-primary"
+                )}
+              >
+                <LogIn className="mr-2 h-4 w-4" /> Sign In
               </Link>
-              <Link href="/auth" passHref legacyBehavior>
-                <Button size="sm" className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-md hover:shadow-lg transform hover:scale-105 transition-all">
-                  <UserPlus className="mr-2 h-4 w-4" /> Sign Up
-                </Button>
+              <Link 
+                href="/auth" 
+                className={cn(
+                  buttonVariants({ size: "sm" }),
+                  "bg-primary hover:bg-primary/90 text-primary-foreground shadow-md hover:shadow-lg transform hover:scale-105 transition-all"
+                )}
+              >
+                <UserPlus className="mr-2 h-4 w-4" /> Sign Up
               </Link>
             </>
           )}

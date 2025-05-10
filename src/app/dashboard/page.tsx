@@ -8,10 +8,11 @@ import { CreatorStats } from "@/components/dashboard/creator-stats";
 // ActivityFeed can be re-added later when its data source is Firebase
 // import { ActivityFeed } from "@/components/dashboard/activity-feed";
 import { useAuth } from "@/hooks/use-auth";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import Link from "next/link";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2, UserCog, Gift, BarChart3, AlertTriangle, Edit3, Sparkles } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 export default function DashboardPage() {
   const { user, loading: authLoading } = useAuth();
@@ -31,8 +32,14 @@ export default function DashboardPage() {
          <AlertTriangle className="h-16 w-16 text-destructive mb-4" />
         <h1 className="text-2xl font-semibold mb-2">Access Denied</h1>
         <p className="text-muted-foreground mb-6">Please sign in to view your dashboard.</p>
-        <Link href="/auth" passHref legacyBehavior>
-          <Button className="bg-primary hover:bg-primary/90 text-primary-foreground transform hover:scale-105 transition-transform">Sign In</Button>
+        <Link 
+            href="/auth" 
+            className={cn(
+                buttonVariants({}),
+                "bg-primary hover:bg-primary/90 text-primary-foreground transform hover:scale-105 transition-transform"
+            )}
+        >
+            Sign In
         </Link>
       </div>
     );

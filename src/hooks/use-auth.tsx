@@ -11,22 +11,26 @@ import {
   signInWithPopup,
   RecaptchaVerifier,
   signInWithPhoneNumber,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
   type ConfirmationResult,
   type User as FirebaseUser
 } from 'firebase/auth';
-import { doc, getDoc, setDoc, serverTimestamp, updateDoc } from 'firebase/firestore';
-import { useRouter } from 'next/navigation'; // For redirecting after profile creation.
+import { doc, getDoc, setDoc, serverTimestamp, updateDoc, Timestamp } from 'firebase/firestore';
+import { useRouter } from 'next/navigation';
 
 interface AuthContextType {
   user: AuthUser | null;
-  firebaseUser: FirebaseUser | null; // Expose Firebase user object
+  firebaseUser: FirebaseUser | null;
   loading: boolean;
-  signInWithGoogle: () => Promise<void>;
+  signInWithGoogle: (userRole: 'creator' | 'supporter') => Promise<void>;
+  signUpWithEmailPassword: (email: string, password: string, userRole: 'creator' | 'supporter', additionalData?: Partial<User>) => Promise<FirebaseUser | null>;
+  signInWithEmailPassword: (email: string, password: string) => Promise<FirebaseUser | null>;
   setUpRecaptcha: (elementId: string) => Promise<RecaptchaVerifier | undefined>;
-  signInWithPhone: (phoneNumber: string, appVerifier: RecaptchaVerifier) => Promise<ConfirmationResult | undefined>;
-  confirmOtp: (confirmationResult: ConfirmationResult, otp: string) => Promise<FirebaseUser | null>;
+  signInWithPhone: (phoneNumber: string, appVerifier: RecaptchaVerifier, userRole: 'creator' | 'supporter') => Promise<ConfirmationResult | undefined>;
+  confirmOtp: (confirmationResult: ConfirmationResult, otp: string, userRole: 'creator' | 'supporter') => Promise<FirebaseUser | null>;
   signOut: () => Promise<void>;
-  completeUserProfile: (profileData: Partial<User>) => Promise<void>;
+  completeUserProfile: (profileData: Partial<User>, userRole: 'creator' | 'supporter') => Promise<void>;
   updateUserFirestoreProfile: (userId: string, data: Partial<User>) => Promise<void>;
 }
 
@@ -42,87 +46,117 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
       setFirebaseUser(fbUser);
       if (fbUser) {
-        // User is signed in, see docs for a list of available properties
-        // https://firebase.google.com/docs/reference/js/firebase.User
         const userDocRef = doc(db, "users", fbUser.uid);
         const userDocSnap = await getDoc(userDocRef);
         if (userDocSnap.exists()) {
-          setUser({ id: fbUser.uid, ...userDocSnap.data() } as AuthUser);
+          const userData = userDocSnap.data();
+          setUser({ 
+            id: fbUser.uid, 
+            ...userData,
+            // Ensure timestamps are handled correctly if they come from Firestore
+            createdAt: userData.createdAt instanceof Timestamp ? userData.createdAt.toDate().toISOString() : userData.createdAt,
+            updatedAt: userData.updatedAt instanceof Timestamp ? userData.updatedAt.toDate().toISOString() : userData.updatedAt,
+          } as AuthUser);
         } else {
-          // User exists in Firebase Auth but not in Firestore (e.g. first sign-in via Google/Phone)
-          // Set a minimal user object, profile completion will fill the rest
-          const newUserProfile: AuthUser = {
-            id: fbUser.uid,
-            email: fbUser.email,
+          // This case might be hit if user authenticates but profile creation is pending
+          // Minimal user object, profile completion should handle the rest.
+          // The role selection would happen before this, so it should be passed to profile creation.
+          setUser({ 
+            id: fbUser.uid, 
+            email: fbUser.email, 
             phoneNumber: fbUser.phoneNumber,
             profilePicUrl: fbUser.photoURL,
-            isCreator: false,
-            createdAt: serverTimestamp(), // Will be converted by Firestore
-          };
-          setUser(newUserProfile);
-          // Optionally redirect to a profile completion page if necessary
-          // router.push('/auth?slide=completeProfile'); // Handled in auth page
+            isCreator: false, // Default, will be updated by completeUserProfile
+          } as AuthUser);
         }
       } else {
-        // User is signed out
         setUser(null);
       }
       setLoading(false);
     });
-
-    // Cleanup subscription on unmount
     return () => unsubscribe();
-  }, [router]);
+  }, []);
 
-  const signInWithGoogle = async () => {
+  const createInitialUserDocument = async (fbUser: FirebaseUser, userRole: 'creator' | 'supporter', additionalData?: Partial<User>) => {
+    const userDocRef = doc(db, "users", fbUser.uid);
+    const userDocSnap = await getDoc(userDocRef);
+    if (!userDocSnap.exists()) {
+      const newUserProfile: Partial<User> = {
+        email: fbUser.email,
+        fullName: fbUser.displayName || additionalData?.fullName,
+        profilePicUrl: fbUser.photoURL || additionalData?.profilePicUrl,
+        phoneNumber: fbUser.phoneNumber || additionalData?.phoneNumber,
+        isCreator: userRole === 'creator',
+        createdAt: serverTimestamp(),
+        username: additionalData?.username,
+        bio: additionalData?.bio,
+        ...(userRole === 'creator' && {
+          tipHandle: additionalData?.tipHandle,
+          category: additionalData?.category,
+        }),
+      };
+      await setDoc(userDocRef, newUserProfile, { merge: true });
+      return newUserProfile;
+    }
+    return userDocSnap.data() as User;
+  };
+
+  const signInWithGoogle = async (userRole: 'creator' | 'supporter') => {
     setLoading(true);
     const provider = new GoogleAuthProvider();
     try {
       const result = await signInWithPopup(auth, provider);
-      const fbUser = result.user;
-      // Check if user exists in Firestore, if not, create basic profile
-      const userDocRef = doc(db, "users", fbUser.uid);
-      const userDocSnap = await getDoc(userDocRef);
-      if (!userDocSnap.exists()) {
-        const newUserProfile: Partial<User> = {
-            email: fbUser.email,
-            fullName: fbUser.displayName,
-            profilePicUrl: fbUser.photoURL,
-            isCreator: false,
-            createdAt: serverTimestamp(),
-        };
-        await setDoc(userDocRef, newUserProfile, { merge: true }); // merge true in case of race conditions
-        setUser({ id: fbUser.uid, ...newUserProfile } as AuthUser);
-      }
-      // User state will be updated by onAuthStateChanged listener
+      await createInitialUserDocument(result.user, userRole);
+      // onAuthStateChanged will handle setting user state and navigation
     } catch (error) {
       console.error("Error signing in with Google: ", error);
-      // Handle error (e.g., show toast)
+      throw error;
     } finally {
-      setLoading(false); // Listener will set loading to false too
+      // setLoading(false); // onAuthStateChanged handles final loading state
+    }
+  };
+
+  const signUpWithEmailPassword = async (email: string, password: string, userRole: 'creator' | 'supporter', additionalData?: Partial<User>) => {
+    setLoading(true);
+    try {
+      const result = await createUserWithEmailAndPassword(auth, email, password);
+      await createInitialUserDocument(result.user, userRole, additionalData);
+      return result.user;
+    } catch (error) {
+      console.error("Error signing up with email: ", error);
+      throw error;
+    } finally {
+      // setLoading(false);
+    }
+  };
+  
+  const signInWithEmailPassword = async (email: string, password: string) => {
+    setLoading(true);
+    try {
+      const result = await signInWithEmailAndPassword(auth, email, password);
+      // onAuthStateChanged will handle if user doc needs update or creation
+      return result.user;
+    } catch (error) {
+      console.error("Error signing in with email: ", error);
+      throw error;
+    } finally {
+      // setLoading(false);
     }
   };
   
   const setUpRecaptcha = async (elementId: string): Promise<RecaptchaVerifier | undefined> => {
-    if (!auth) return undefined; // Ensure auth is initialized
-    // cleanup existing verifier
-    if ((window as any).recaptchaVerifier) {
-        (window as any).recaptchaVerifier.clear();
+    if (!auth) return undefined;
+    if ((window as any).recaptchaVerifierInstance) {
+        (window as any).recaptchaVerifierInstance.clear();
     }
     try {
         const recaptchaVerifier = new RecaptchaVerifier(auth, elementId, {
-            'size': 'invisible', // can be 'normal' or 'compact' or 'invisible'
-            'callback': (response: any) => {
-                // reCAPTCHA solved, allow signInWithPhoneNumber.
-                console.log("Recaptcha verified", response);
-            },
-            'expired-callback': () => {
-                // Response expired. Ask user to solve reCAPTCHA again.
-                console.log("Recaptcha expired");
-            }
+            'size': 'invisible',
+            'callback': (response: any) => {},
+            'expired-callback': () => {}
         });
-        (window as any).recaptchaVerifier = recaptchaVerifier; // Store it on window for persistence across renders if needed
-        await recaptchaVerifier.render(); // Explicitly render if it's not already
+        (window as any).recaptchaVerifierInstance = recaptchaVerifier;
+        await recaptchaVerifier.render();
         return recaptchaVerifier;
     } catch (error) {
         console.error("Error setting up reCAPTCHA:", error);
@@ -130,86 +164,94 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const signInWithPhone = async (phoneNumber: string, appVerifier: RecaptchaVerifier): Promise<ConfirmationResult | undefined> => {
+  const signInWithPhone = async (phoneNumber: string, appVerifier: RecaptchaVerifier, userRole: 'creator' | 'supporter') => {
     setLoading(true);
     try {
       const confirmationResult = await signInWithPhoneNumber(auth, phoneNumber, appVerifier);
-      setLoading(false);
+      // Store userRole or pass it to confirmOtp
+      (window as any).pendingUserRole = userRole; 
       return confirmationResult;
     } catch (error) {
       console.error("Error sending OTP:", error);
-      setLoading(false);
-      // Handle specific errors like 'auth/invalid-phone-number'
-      throw error; // Rethrow to be caught by the caller
+      throw error;
+    } finally {
+      // setLoading(false);
     }
   };
 
-  const confirmOtp = async (confirmationResult: ConfirmationResult, otp: string): Promise<FirebaseUser | null> => {
+  const confirmOtp = async (confirmationResult: ConfirmationResult, otp: string, userRole: 'creator' | 'supporter') => {
     setLoading(true);
     try {
       const result = await confirmationResult.confirm(otp);
-      const fbUser = result.user;
-       // Check if user exists in Firestore, if not, create basic profile
-      const userDocRef = doc(db, "users", fbUser.uid);
-      const userDocSnap = await getDoc(userDocRef);
-      if (!userDocSnap.exists()) {
-        const newUserProfile: Partial<User> = {
-            phoneNumber: fbUser.phoneNumber,
-            isCreator: false,
-            createdAt: serverTimestamp(),
-        };
-        await setDoc(userDocRef, newUserProfile, { merge: true });
-        setUser({ id: fbUser.uid, ...newUserProfile } as AuthUser);
-      }
-      // User state will be updated by onAuthStateChanged listener
-      setLoading(false);
-      return fbUser;
+      await createInitialUserDocument(result.user, userRole, { phoneNumber: result.user.phoneNumber });
+      return result.user;
     } catch (error) {
       console.error("Error confirming OTP:", error);
-      setLoading(false);
-      // Handle specific errors like 'auth/invalid-verification-code'
-      throw error; // Rethrow
+      throw error;
+    } finally {
+      // setLoading(false);
     }
   };
 
-  const completeUserProfile = async (profileData: Partial<User>) => {
-    if (!firebaseUser) {
-      console.error("No Firebase user to complete profile for.");
-      return;
-    }
+  const completeUserProfile = async (profileData: Partial<User>, userRole: 'creator' | 'supporter') => {
+    if (!firebaseUser) throw new Error("No Firebase user to complete profile for.");
     setLoading(true);
     try {
       const userDocRef = doc(db, "users", firebaseUser.uid);
       const dataToSet: Partial<User> = {
         ...profileData,
-        id: firebaseUser.uid, // Ensure id is set correctly
-        email: firebaseUser.email || profileData.email, // Preserve from Firebase if available
-        phoneNumber: firebaseUser.phoneNumber || profileData.phoneNumber, // Preserve from Firebase
-        profilePicUrl: firebaseUser.photoURL || profileData.profilePicUrl,
-        createdAt: serverTimestamp(), // Set on creation
+        id: firebaseUser.uid,
+        email: firebaseUser.email || profileData.email,
+        phoneNumber: firebaseUser.phoneNumber || profileData.phoneNumber,
+        // profilePicUrl might be from Google/Phone initial, or from form
+        profilePicUrl: profileData.profilePicUrl || firebaseUser.photoURL,
+        isCreator: userRole === 'creator',
+        updatedAt: serverTimestamp(),
       };
-      await setDoc(userDocRef, dataToSet, { merge: true }); // Use merge:true to update if exists or create if not
-      setUser(prevUser => ({ ...prevUser, ...dataToSet, id: firebaseUser.uid } as AuthUser));
-      // If user becomes a creator during profile completion
-      if (profileData.isCreator && profileData.tipHandle && profileData.category) {
+      // Ensure createdAt is only set if it's truly a new profile, or merge:true handles it
+      const userDoc = await getDoc(userDocRef);
+      if (!userDoc.exists() || !userDoc.data()?.createdAt) {
+          dataToSet.createdAt = serverTimestamp();
+      }
+
+      await setDoc(userDocRef, dataToSet, { merge: true });
+      
+      // If user is a creator, create/update creator document
+      if (userRole === 'creator' && dataToSet.isCreator && profileData.tipHandle && profileData.category) {
         const creatorDocRef = doc(db, "creators", firebaseUser.uid);
-        await setDoc(creatorDocRef, {
+        const creatorData: Partial<Creator> = {
           userId: firebaseUser.uid,
           tipHandle: profileData.tipHandle,
           fullName: profileData.fullName,
-          profilePicUrl: profileData.profilePicUrl,
+          profilePicUrl: dataToSet.profilePicUrl,
           category: profileData.category,
           bio: profileData.bio || "",
           totalTips: 0,
           totalAmountReceived: 0,
           active: true,
           featured: false,
-          createdAt: serverTimestamp(),
-        }, { merge: true });
+          // email and phone can be denormalized from user doc
+          email: dataToSet.email,
+          phoneNumber: dataToSet.phoneNumber,
+          updatedAt: serverTimestamp(),
+        };
+        const creatorDoc = await getDoc(creatorDocRef);
+         if (!creatorDoc.exists() || !creatorDoc.data()?.createdAt) {
+          creatorData.createdAt = serverTimestamp();
+        }
+        await setDoc(creatorDocRef, creatorData, { merge: true });
+      }
+      // Trigger onAuthStateChanged to update local user state with full profile
+      // For immediate UI update, can call setUser here, but onAuthStateChanged is safer.
+      // A manual fetch and setUser might be needed if onAuthStateChanged doesn't re-fetch fast enough
+      const updatedUserDoc = await getDoc(userDocRef);
+      if (updatedUserDoc.exists()) {
+        setUser({ id: firebaseUser.uid, ...updatedUserDoc.data() } as AuthUser);
       }
 
     } catch (error) {
       console.error("Error completing user profile:", error);
+      throw error;
     } finally {
       setLoading(false);
     }
@@ -223,21 +265,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(prevUser => prevUser ? ({ ...prevUser, ...data } as AuthUser) : null);
     } catch (error) {
       console.error("Error updating user profile in Firestore:", error);
+      throw error;
     } finally {
       setLoading(false);
     }
   };
 
-
   const signOut = async () => {
     setLoading(true);
     try {
       await firebaseSignOut(auth);
-      // User state will be set to null by onAuthStateChanged
     } catch (error) {
       console.error("Error signing out: ", error);
+      throw error;
     } finally {
-      setLoading(false);
+      // setLoading(false); // onAuthStateChanged will handle this
     }
   };
 
@@ -247,6 +289,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       firebaseUser,
       loading, 
       signInWithGoogle,
+      signUpWithEmailPassword,
+      signInWithEmailPassword,
       setUpRecaptcha,
       signInWithPhone,
       confirmOtp,

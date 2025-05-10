@@ -1,8 +1,8 @@
-import { mockTestimonials } from "@/lib/placeholder-data";
+
+import { mockTestimonials, type Testimonial } from "@/lib/placeholder-data";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Star, Quote } from "lucide-react";
-import type { Testimonial } from "@/lib/placeholder-data"; // Import the type
 
 export function Testimonials() {
   if (!mockTestimonials || mockTestimonials.length === 0) {
