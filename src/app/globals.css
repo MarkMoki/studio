@@ -8,95 +8,98 @@ body {
 
 @layer base {
   :root {
+    /* Dark Theme (Default) */
+    --background: 240 10% 3.9%; /* Very Dark Blue/Gray */
+    --foreground: 0 0% 98%; /* Almost White */
+
+    --card: 240 10% 10%; /* Darker Card Background */
+    --card-foreground: 0 0% 95%; /* Lighter Card Text */
+
+    --popover: 240 10% 8%; /* Dark Popover */
+    --popover-foreground: 0 0% 95%;
+
+    --primary: 140 70% 50%; /* Vibrant Emerald Green */
+    --primary-foreground: 0 0% 100%; /* White text on primary */
+
+    --secondary: 220 15% 15%; /* Darker Secondary Background */
+    --secondary-foreground: 0 0% 80%; /* Lighter Secondary Text */
+
+    --muted: 220 10% 25%; /* Muted Dark Gray */
+    --muted-foreground: 0 0% 60%; /* Muted Lighter Gray Text */
+
+    --accent: 45 100% 55%; /* Bright Gold/Orange */
+    --accent-foreground: 240 10% 3.9%; /* Dark text on accent */
+
+    --destructive: 0 70% 50%; /* Vibrant Red */
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 220 15% 20%; /* Darker Border */
+    --input: 220 15% 18%; /* Dark Input Background */
+    --ring: 140 70% 55%; /* Brighter Green for focus rings */
+
+    --radius: 0.75rem; /* Slightly more rounded for modern feel */
+
+    --chart-1: 140 70% 50%;
+    --chart-2: 45 100% 55%;
+    --chart-3: 200 80% 60%; /* Cyan */
+    --chart-4: 280 80% 70%; /* Purple */
+    --chart-5: 330 80% 65%; /* Pink */
+
+    --sidebar-background: 240 10% 7%; 
+    --sidebar-foreground: 0 0% 90%; 
+    --sidebar-primary: 140 70% 50%; 
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 240 10% 12%;
+    --sidebar-accent-foreground: 0 0% 95%;
+    --sidebar-border: 240 10% 15%;
+    --sidebar-ring: 140 70% 55%;
+  }
+
+  .light {
+    /* Light Theme */
     --background: 0 0% 98%; /* Off-white */
-    --foreground: 0 0% 3.9%; /* Dark text */
+    --foreground: 240 10% 3.9%; /* Dark text */
 
     --card: 0 0% 100%; /* White */
-    --card-foreground: 0 0% 3.9%;
+    --card-foreground: 240 10% 3.9%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 3.9%;
+    --popover-foreground: 240 10% 3.9%;
 
-    --primary: 120 61% 40%; /* Vibrant Green (#28A428) */
-    --primary-foreground: 0 0% 98%; /* White text on primary */
+    --primary: 140 65% 40%; /* Slightly darker Emerald Green for light mode contrast */
+    --primary-foreground: 0 0% 100%; 
 
-    --secondary: 40 50% 92%; /* Light Beige (#F6F2E9) */
-    --secondary-foreground: 40 30% 20%; /* Darker text on beige */
+    --secondary: 40 50% 94%; /* Light Beige */
+    --secondary-foreground: 40 30% 20%; 
 
     --muted: 0 0% 96.1%; /* Light gray */
-    --muted-foreground: 0 0% 45.1%; /* Grayer text */
+    --muted-foreground: 0 0% 45.1%; 
 
-    --accent: 39 100% 50%; /* Bright Orange (#FFA500) */
-    --accent-foreground: 0 0% 100%; /* White text on accent */
+    --accent: 45 90% 50%; /* Gold/Orange */
+    --accent-foreground: 0 0% 100%; 
 
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
 
-    --border: 0 0% 89.8%; /* Light gray border */
-    --input: 0 0% 92%; /* Light gray input background */
-    --ring: 120 61% 45%; /* Green for focus rings */
+    --border: 0 0% 89.8%; 
+    --input: 0 0% 92%; 
+    --ring: 140 65% 45%; 
 
-    --radius: 0.5rem;
+    /* chart colors remain same or can be adjusted if needed for light */
+    --chart-1: 140 65% 45%;
+    --chart-2: 45 90% 50%;
+    --chart-3: 200 70% 50%;
+    --chart-4: 280 70% 60%;
+    --chart-5: 330 70% 60%;
 
-    --chart-1: 120 61% 50%;
-    --chart-2: 39 100% 50%;
-    --chart-3: 197 37% 24%;
-    --chart-4: 43 74% 66%;
-    --chart-5: 27 87% 67%;
-
-    --sidebar-background: 40 60% 97%; /* Very light beige */
-    --sidebar-foreground: 40 30% 25%; /* Dark brown/gray for sidebar text */
-    --sidebar-primary: 120 61% 40%; /* Green for active items */
-    --sidebar-primary-foreground: 0 0% 98%; /* White */
-    --sidebar-accent: 120 61% 85%; /* Light green for hover */
-    --sidebar-accent-foreground: 120 61% 30%; /* Darker green for text on hover */
-    --sidebar-border: 40 40% 85%; /* Beige border in sidebar */
-    --sidebar-ring: 120 61% 45%; /* Green for focus rings in sidebar */
-  }
-
-  .dark {
-    --background: 0 0% 3.9%;
-    --foreground: 0 0% 98%;
-
-    --card: 0 0% 3.9%;
-    --card-foreground: 0 0% 98%;
-
-    --popover: 0 0% 3.9%;
-    --popover-foreground: 0 0% 98%;
-
-    --primary: 120 61% 50%; /* Brighter Green for dark mode */
-    --primary-foreground: 0 0% 9%; 
-
-    --secondary: 40 10% 15%; /* Darker Beige for dark mode */
-    --secondary-foreground: 0 0% 98%;
-
-    --muted: 0 0% 14.9%;
-    --muted-foreground: 0 0% 63.9%;
-
-    --accent: 39 100% 55%; /* Slightly brighter Orange for dark mode */
-    --accent-foreground: 0 0% 9%;
-
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 0 0% 98%;
-
-    --border: 0 0% 14.9%;
-    --input: 0 0% 14.9%;
-    --ring: 120 61% 50%;
-
-    --chart-1: 120 61% 50%;
-    --chart-2: 39 100% 55%;
-    --chart-3: 197 37% 64%;
-    --chart-4: 43 74% 46%;
-    --chart-5: 27 87% 47%;
-
-    --sidebar-background: 0 0% 7%; /* Darker base for sidebar */
-    --sidebar-foreground: 0 0% 90%; 
-    --sidebar-primary: 120 61% 50%; 
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 0 0% 12%;
-    --sidebar-accent-foreground: 0 0% 95%;
-    --sidebar-border: 0 0% 14.9%;
-    --sidebar-ring: 120 61% 50%;
+    --sidebar-background: 40 60% 97%; 
+    --sidebar-foreground: 40 30% 25%; 
+    --sidebar-primary: 140 65% 40%; 
+    --sidebar-primary-foreground: 0 0% 98%; 
+    --sidebar-accent: 140 65% 90%; /* Light green for hover */
+    --sidebar-accent-foreground: 140 65% 30%; 
+    --sidebar-border: 40 40% 85%; 
+    --sidebar-ring: 140 65% 45%; 
   }
 }
 
@@ -106,5 +109,44 @@ body {
   }
   body {
     @apply bg-background text-foreground;
+    @apply antialiased; /* ensure antialiasing is applied */
+  }
+}
+
+/* Entrance Animations */
+@layer utilities {
+  .animate-fade-in {
+    animation: fadeIn 0.5s ease-out forwards;
+  }
+  .animate-slide-up {
+    animation: slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+  .animate-slide-in-left {
+    animation: slideInLeft 0.5s ease-out forwards;
+  }
+   .animate-slide-in-right {
+    animation: slideInRight 0.5s ease-out forwards;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  @keyframes slideUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes slideInLeft {
+    from { opacity: 0; transform: translateX(-20px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+  @keyframes slideInRight {
+    from { opacity: 0; transform: translateX(20px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+
+  /* Staggered animation utility */
+  .stagger-children > * {
+    opacity: 0;
   }
 }

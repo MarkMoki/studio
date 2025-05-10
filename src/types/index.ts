@@ -10,18 +10,25 @@ export interface User {
   createdAt: string; // ISO date string
 }
 
+export interface SocialLink {
+  platform: 'twitter' | 'instagram' | 'facebook' | 'youtube' | 'tiktok' | 'website' | 'other';
+  url: string;
+}
+
 export interface Creator {
   id: string; // This will be the same as userId
   userId: string;
   tipHandle: string;
   fullName?: string | null; // Denormalized for easier display
   profilePicUrl?: string | null; // Denormalized
+  coverImageUrl?: string | null; // For creator profile page
   bio?: string | null; // Denormalized
   totalTips: number;
   totalAmountReceived: number; // in KES
   category: string; // e.g., Dance, Music, Art
   active: boolean;
   featured: boolean;
+  socialLinks?: SocialLink[];
 }
 
 export interface Tip {

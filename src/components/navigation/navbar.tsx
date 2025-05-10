@@ -1,7 +1,7 @@
 "use client";
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { Home, Users, LayoutDashboard, LogIn, UserPlus, HandCoins } from 'lucide-react';
+import { Home, Users, LayoutDashboard, LogIn, UserPlus, HandCoins, Sparkles } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import {
   DropdownMenu,
@@ -24,11 +24,12 @@ export function Navbar() {
   };
   
   return (
-    <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+    <header className="sticky top-0 z-50 w-full border-b bg-background/90 backdrop-blur supports-[backdrop-filter]:bg-background/70 shadow-sm">
       <div className="container flex h-16 items-center justify-between">
-        <Link href="/" className="flex items-center space-x-2">
-          <HandCoins className="h-8 w-8 text-primary" />
-          <span className="text-2xl font-bold text-primary">TipKesho</span>
+        <Link href="/" className="flex items-center space-x-2 group">
+          <HandCoins className="h-8 w-8 text-primary transition-transform duration-300 group-hover:rotate-[15deg] group-hover:scale-110" />
+          <span className="text-2xl font-bold text-primary group-hover:text-primary/80 transition-colors">TipKesho</span>
+           <Sparkles className="h-5 w-5 text-accent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
         </Link>
         <nav className="hidden md:flex items-center space-x-6 text-sm font-medium">
           <Link href="/" className="transition-colors hover:text-primary">
@@ -50,7 +51,7 @@ export function Navbar() {
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="relative h-10 w-10 rounded-full">
-                  <Avatar className="h-10 w-10">
+                  <Avatar className="h-10 w-10 border-2 border-primary/50 hover:border-primary transition-colors">
                     <AvatarImage src={user.profilePicUrl || undefined} alt={user.fullName || "User"} data-ai-hint="profile avatar" />
                     <AvatarFallback>{getInitials(user.fullName)}</AvatarFallback>
                   </Avatar>
@@ -81,12 +82,12 @@ export function Navbar() {
           ) : (
             <>
               <Link href="/auth/signin" passHref legacyBehavior>
-                <Button variant="ghost" size="sm">
+                <Button variant="ghost" size="sm" className="hover:text-primary">
                   <LogIn className="mr-2 h-4 w-4" /> Sign In
                 </Button>
               </Link>
               <Link href="/auth/signup" passHref legacyBehavior>
-                <Button size="sm" className="bg-primary hover:bg-primary/90 text-primary-foreground">
+                <Button size="sm" className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-md hover:shadow-lg transform hover:scale-105 transition-all">
                   <UserPlus className="mr-2 h-4 w-4" /> Sign Up
                 </Button>
               </Link>

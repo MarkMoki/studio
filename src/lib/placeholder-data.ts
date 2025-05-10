@@ -1,4 +1,4 @@
-import type { Creator, Tip, User } from '@/types';
+import type { Creator, Tip, User, SocialLink } from '@/types';
 
 export const placeholderUsers: User[] = [
   {
@@ -38,12 +38,17 @@ export const placeholderCreators: Creator[] = [
     tipHandle: '@AmaniArt',
     fullName: 'Amani Art',
     profilePicUrl: 'https://picsum.photos/seed/amaniart/200/200',
-    bio: 'Digital artist painting Nairobi\'s vibrant culture. Your support fuels my passion! 🎨✨',
+    coverImageUrl: `https://picsum.photos/seed/amaniart_cover/1200/400`,
+    bio: 'Digital artist painting Nairobi\'s vibrant culture. Your support fuels my passion! 🎨✨ Also exploring Afrofuturism and surreal landscapes. Catch my latest series on Instagram!',
     totalTips: 123,
     totalAmountReceived: 6400,
     category: 'Art',
     active: true,
     featured: true,
+    socialLinks: [
+      { platform: 'instagram', url: '#' },
+      { platform: 'twitter', url: '#' },
+    ]
   },
   {
     id: 'creator2',
@@ -51,12 +56,17 @@ export const placeholderCreators: Creator[] = [
     tipHandle: '@DanceQueenShiro',
     fullName: 'Shiro M.',
     profilePicUrl: 'https://picsum.photos/seed/shiro/200/200',
-    bio: 'Afrobeat dancer from Nairobi. Let\'s vibe!',
+    coverImageUrl: `https://picsum.photos/seed/shiro_cover/1200/400`,
+    bio: 'Afrobeat dancer from Nairobi. Let\'s vibe! Spreading joy through movement. Check out my TikTok for daily dance challenges and tutorials.',
     totalTips: 250,
     totalAmountReceived: 12500,
     category: 'Dance',
     active: true,
     featured: false,
+    socialLinks: [
+      { platform: 'tiktok', url: '#' },
+      { platform: 'youtube', url: '#' },
+    ]
   },
   {
     id: 'creator3',
@@ -64,12 +74,17 @@ export const placeholderCreators: Creator[] = [
     tipHandle: '@BengaBeats',
     fullName: 'Benga Beats Studio',
     profilePicUrl: 'https://picsum.photos/seed/benga/200/200',
-    bio: 'Crafting the freshest Benga tunes. Support local music!',
+    coverImageUrl: `https://picsum.photos/seed/benga_cover/1200/400`,
+    bio: 'Crafting the freshest Benga tunes. Support local music! We are a collective of musicians dedicated to preserving and evolving traditional Kenyan sounds.',
     totalTips: 88,
     totalAmountReceived: 4400,
     category: 'Music',
     active: true,
     featured: true,
+    socialLinks: [
+      { platform: 'website', url: '#' },
+      { platform: 'facebook', url: '#' },
+    ]
   },
    {
     id: 'creator4',
@@ -77,12 +92,16 @@ export const placeholderCreators: Creator[] = [
     tipHandle: '@LaughFactoryKE',
     fullName: 'Laugh Factory Kenya',
     profilePicUrl: 'https://picsum.photos/seed/comedy/200/200',
-    bio: 'Bringing you daily doses of Kenyan humor.',
+    coverImageUrl: `https://picsum.photos/seed/comedy_cover/1200/400`,
+    bio: 'Bringing you daily doses of Kenyan humor. Stand-up, skits, and all things funny. Your tips help us produce more content and support upcoming comedians.',
     totalTips: 150,
     totalAmountReceived: 7000,
     category: 'Comedy',
-    active: false,
+    active: false, // Not active, so won't show on main creators page by default
     featured: false,
+    socialLinks: [
+      { platform: 'youtube', url: '#' },
+    ]
   },
 ];
 
@@ -119,6 +138,36 @@ export const placeholderTips: Tip[] = [
     message: null,
     timestamp: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(), // 1 day ago
     paymentRef: 'mpesa_txn_003',
+  },
+];
+
+export const mockTestimonials = [
+  {
+    id: 'testimonial1',
+    name: 'Fatuma A.',
+    role: 'Art Enthusiast',
+    avatar: 'https://picsum.photos/seed/fatuma/100/100',
+    dataAiHint: "female portrait",
+    quote: "TipKesho makes it so easy to support my favorite Kenyan artists. The AI message suggestions are a fun touch!",
+    stars: 5,
+  },
+  {
+    id: 'testimonial2',
+    name: 'DJ Kym',
+    role: 'Music Creator',
+    avatar: 'https://picsum.photos/seed/djkym/100/100',
+    dataAiHint: "male dj",
+    quote: "Finally, a platform that understands the creator economy in Kenya! Getting tips directly from fans is a game-changer.",
+    stars: 5,
+  },
+  {
+    id: 'testimonial3',
+    name: 'Linda M.',
+    role: 'Dance Follower',
+    avatar: 'https://picsum.photos/seed/linda/100/100',
+    dataAiHint: "woman smiling",
+    quote: "I love discovering new dancers on TipKesho. It feels great to directly contribute to their journey.",
+    stars: 4,
   },
 ];
 
