@@ -1,3 +1,4 @@
+
 {
   "firestore": {
     "rules": "firestore.rules",
@@ -18,6 +19,9 @@
         "source": "**",
         "destination": "/index.html"
       }
-    ]
+    ],
+    "frameworksBackend": {
+      "region": "us-central1"
+    }
   }
 }

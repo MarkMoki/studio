@@ -1,4 +1,6 @@
 
+rules_version = '2';
+
 service firebase.storage {
   match /b/{bucket}/o {
 
@@ -12,35 +14,34 @@ service firebase.storage {
       return request.resource.size < maxBytes;
     }
 
-    // Profile images (2MB max)
-    // Path should match how files are uploaded in the app code.
-    // e.g., users/{userId}/profile.{extension} or users/{userId}/profilePic
-    match /users/{userId}/profile.{extension} {
+    // Profile images for any user (creators or supporters)
+    // Stored under users/{userId}/profile/{fileName}
+    match /users/{userId}/profile/{fileName} {
+      // Anyone can read profile pictures (publicly accessible)
       allow read: if true;
-      allow write: if isUser(userId) && isUnderSizeLimit(2 * 1024 * 1024);
-    }
-     match /users/{userId}/profile/{fileName} { // More generic to catch any file in profile folder
-      allow read: if true;
-      allow write: if isUser(userId) && isUnderSizeLimit(2 * 1024 * 1024);
+      // Only the authenticated user can write to their own profile picture path
+      // Max 2MB for profile pictures
+      allow write: if isUser(userId) && isUnderSizeLimit(2 * 1024 * 1024) &&
+                   request.resource.contentType.matches('image/.*');
     }
 
-
-    // Creator cover images (5MB max)
-    // Path should match upload path. e.g., creators/{creatorId}/cover.{extension}
-    match /creators/{creatorId}/cover.{extension} {
+    // Creator-specific images, like cover photos
+    // Stored under creators/{creatorId}/cover/{fileName}
+    // Note: creatorId here would be the same as userId for the creator
+    match /creators/{creatorId}/cover/{fileName} {
+      // Anyone can read cover images
       allow read: if true;
-      allow write: if isUser(creatorId) && isUnderSizeLimit(5 * 1024 * 1024);
+      // Only the authenticated user (who is the creator) can write to their cover image path
+      // Max 5MB for cover images
+      allow write: if isUser(creatorId) && isUnderSizeLimit(5 * 1024 * 1024) &&
+                   request.resource.contentType.matches('image/.*');
     }
-    match /creators/{creatorId}/cover/{fileName} { // More generic
-      allow read: if true;
-      allow write: if isUser(creatorId) && isUnderSizeLimit(5 * 1024 * 1024);
-    }
-    
 
-    // Deny all other paths by default if not explicitly allowed
-    // It's good practice to uncomment this for production.
+    // Deny all other writes by default to paths not explicitly matched.
+    // Reads are generally public unless specified otherwise.
     // match /{allPaths=**} {
-    //   allow read, write: if false;
+    //   allow read: if true; // Or restrict as needed
+    //   allow write: if false;
     // }
   }
 }

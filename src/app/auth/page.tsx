@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { HandCoins, Sparkles, ArrowLeft, Phone, Mail, CheckCircle, UserPlus, Loader2, ShieldCheck, Users, Briefcase, Eye, EyeOff } from "lucide-react";
+import { HandCoins, Sparkles, ArrowLeft, Phone, Mail, CheckCircle, UserPlus, Loader2, ShieldCheck, Users, Briefcase, Eye, EyeOff, LogIn } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
@@ -21,10 +21,8 @@ import { Textarea } from "@/components/ui/textarea";
 import Link from 'next/link';
 import { doc, getDoc } from "firebase/firestore";
 
-type UserRole = "creator" | "supporter";
-type Slide = "roleSelection" | "authMethodSelection" | "phoneInput" | "otpVerification" | "emailAuth" | "completeProfile";
+type Slide = "welcome" | "authInput" | "otpVerification" | "completeProfile";
 type AuthMethod = "phone" | "google" | "email" | null;
-type EmailAuthMode = "signIn" | "signUp";
 
 const slideVariants = {
   initial: (direction: number) => ({
@@ -44,47 +42,42 @@ const slideVariants = {
 };
 
 export default function AuthPage() {
-  const [userRole, setUserRole] = useState<UserRole | null>(null);
-  const [currentSlide, setCurrentSlide] = useState<Slide>("roleSelection");
+  const [currentSlide, setCurrentSlide] = useState<Slide>("welcome");
   const [direction, setDirection] = useState(1);
   const [authMethod, setAuthMethod] = useState<AuthMethod>(null);
-  
-  const [phoneNumber, setPhoneNumber] = useState(""); 
+  const [isCreatorRole, setIsCreatorRole] = useState(false); // For "Complete Profile" toggle
+
+  const [phoneNumber, setPhoneNumber] = useState("");
   const [otp, setOtp] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [emailAuthMode, setEmailAuthMode] = useState<EmailAuthMode>("signUp");
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [email, setEmail] = useState(""); // For email auth if added
+  const [password, setPassword] = useState(""); // For email auth if added
 
   const [username, setUsername] = useState("");
   const [fullName, setFullName] = useState("");
-  const [formPhoneNumber, setFormPhoneNumber] = useState(""); 
+  const [formPhoneNumber, setFormPhoneNumber] = useState(""); // For profile completion form
   const [profilePicFile, setProfilePicFile] = useState<File | null>(null);
   const [profilePicPreview, setProfilePicPreview] = useState<string | null>(null);
   const [tipHandle, setTipHandle] = useState('');
   const [category, setCategory] = useState('');
   const [bio, setBio] = useState('');
-  
+
   const [isLoading, setIsLoading] = useState(false);
-  const [isRedirecting, setIsRedirecting] = useState(true); // Used to show loader before redirect
+  const [isRedirecting, setIsRedirecting] = useState(true);
 
   const [recaptchaVerifier, setRecaptchaVerifier] = useState<RecaptchaVerifier | undefined>(undefined);
   const [confirmationResult, setConfirmationResult] = useState<ConfirmationResult | undefined>(undefined);
   const recaptchaContainerRef = useRef<HTMLDivElement>(null);
 
-  const { 
-    user, 
-    firebaseUser, 
-    loading: authLoading, 
-    signInWithGoogle, 
-    signUpWithEmailPassword,
-    signInWithEmailPassword,
-    setUpRecaptcha, 
-    signInWithPhone, 
-    confirmOtp, 
-    completeUserProfile 
+  const {
+    user,
+    firebaseUser,
+    loading: authLoading,
+    signInWithGoogle,
+    setUpRecaptcha,
+    signInWithPhone,
+    confirmOtp,
+    completeUserProfile,
+    // Email auth methods can be added here if needed
   } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
@@ -92,81 +85,50 @@ export default function AuthPage() {
   useEffect(() => {
     if (!authLoading) {
       if (user && user.fullName && user.phoneNumber) { // Fully profiled user
-        router.push("/dashboard");
-        // setIsRedirecting will remain true until navigation actually occurs
-      } else if (firebaseUser && (!user?.fullName || !user?.phoneNumber) && currentSlide !== 'completeProfile') { // Logged in, but profile incomplete
-        const fetchUserRoleAndTransition = async () => {
-          let resolvedUserRole = userRole;
-          if (!resolvedUserRole && user?.isCreator !== undefined) {
-               resolvedUserRole = user.isCreator ? 'creator' : 'supporter';
-               setUserRole(resolvedUserRole);
-          } else if (!resolvedUserRole) {
-              if (firebaseUser.uid) {
-                  const userDocRef = doc(db, "users", firebaseUser.uid);
-                  const userDocSnap = await getDoc(userDocRef);
-                  if(userDocSnap.exists() && userDocSnap.data()?.isCreator !== undefined) {
-                      resolvedUserRole = userDocSnap.data()?.isCreator ? 'creator' : 'supporter';
-                      setUserRole(resolvedUserRole); 
-                  }
-              }
-          }
-          
-          if(resolvedUserRole) {
-              if (firebaseUser.displayName && fullName === "") setFullName(firebaseUser.displayName);
-              if (firebaseUser.photoURL && profilePicPreview === null) setProfilePicPreview(firebaseUser.photoURL);
-              if (firebaseUser.phoneNumber && formPhoneNumber === "") setFormPhoneNumber(firebaseUser.phoneNumber);
-              else if (user?.phoneNumber && formPhoneNumber === "") setFormPhoneNumber(user.phoneNumber);
-
-              if (user?.bio && bio === "") setBio(user.bio);
-              if (user?.username && username === "") setUsername(user.username);
-              if (resolvedUserRole === 'creator') {
-                  if(user?.tipHandle && tipHandle === "") setTipHandle(user.tipHandle);
-                  if(user?.category && category === "") setCategory(user.category);
-              }
-              handleNextSlide("completeProfile");
+        router.push(user.isCreator ? "/creator/dashboard" : "/dashboard");
+      } else if (firebaseUser && (!user?.fullName || !user?.phoneNumber) && currentSlide !== 'completeProfile') {
+        // User is logged in via Firebase, but local user profile is incomplete or not yet fetched.
+        // Fetch their role from Firestore to decide if they are a creator for the profile form
+        const fetchUserDocAndTransition = async () => {
+          const userDocRef = doc(db, "users", firebaseUser.uid);
+          const userDocSnap = await getDoc(userDocRef);
+          if (userDocSnap.exists()) {
+            const userData = userDocSnap.data();
+            setIsCreatorRole(userData.isCreator || false); // Set for the toggle
+            if (userData.fullName) setFullName(userData.fullName);
+            if (userData.username) setUsername(userData.username);
+            if (userData.phoneNumber) setFormPhoneNumber(userData.phoneNumber);
+            if (userData.profilePicUrl) setProfilePicPreview(userData.profilePicUrl);
+            if (userData.bio) setBio(userData.bio);
+            if (userData.isCreator) {
+              if (userData.tipHandle) setTipHandle(userData.tipHandle);
+              if (userData.category) setCategory(userData.category);
+            }
           } else {
-               if (currentSlide !== 'roleSelection' && currentSlide !== 'authMethodSelection') { 
-                  setCurrentSlide("roleSelection"); 
-               }
+            // Pre-fill from firebaseUser if available, and set default role based on how they initiated sign-up if that info is available
+            if (firebaseUser.displayName) setFullName(firebaseUser.displayName);
+            if (firebaseUser.photoURL) setProfilePicPreview(firebaseUser.photoURL);
+            if (firebaseUser.phoneNumber) setFormPhoneNumber(firebaseUser.phoneNumber);
           }
-          setIsRedirecting(false); // Allow auth page to render if not redirecting to dashboard
+          handleNextSlide("completeProfile");
+          setIsRedirecting(false);
         };
-        fetchUserRoleAndTransition();
+        fetchUserDocAndTransition();
       } else {
-        setIsRedirecting(false); // Not logged in or already on completeProfile, allow render
+        setIsRedirecting(false);
       }
     }
-  }, [user, firebaseUser, authLoading, router, currentSlide, userRole, fullName, profilePicPreview, formPhoneNumber, bio, username, tipHandle, category]);
-
-
-  useEffect(() => {
-    if (currentSlide === 'completeProfile' && firebaseUser) {
-      if (firebaseUser.displayName && fullName === "") setFullName(firebaseUser.displayName);
-      if (firebaseUser.photoURL && profilePicPreview === null) setProfilePicPreview(firebaseUser.photoURL);
-      
-      if (formPhoneNumber === "") {
-        if (firebaseUser.phoneNumber) setFormPhoneNumber(firebaseUser.phoneNumber);
-        else if (user?.phoneNumber) setFormPhoneNumber(user.phoneNumber);
-      }
-      
-      if (user?.bio && bio === "") setBio(user.bio);
-      if (user?.username && username === "") setUsername(user.username);
-      if (userRole === 'creator') {
-          if(user?.tipHandle && tipHandle === "") setTipHandle(user.tipHandle);
-          if(user?.category && category === "") setCategory(user.category);
-      }
-    }
-  }, [currentSlide, firebaseUser, user, userRole, fullName, profilePicPreview, formPhoneNumber, bio, username, tipHandle, category]);
+  }, [user, firebaseUser, authLoading, router, currentSlide]);
 
 
   const initializeRecaptcha = async () => {
     if (recaptchaContainerRef.current && !recaptchaVerifier) {
-        try {
-            const verifier = await setUpRecaptcha("recaptcha-container-id");
-            setRecaptchaVerifier(verifier);
-        } catch (error) {
-            toast({ title: "reCAPTCHA Error", description: "Failed to initialize reCAPTCHA. Please refresh.", variant: "destructive" });
-        }
+      try {
+        const verifier = await setUpRecaptcha("recaptcha-container-id");
+        setRecaptchaVerifier(verifier);
+      } catch (error) {
+        toast({ title: "reCAPTCHA Error", description: "Failed to initialize reCAPTCHA. Please refresh.", variant: "destructive" });
+      }
     }
   };
 
@@ -175,42 +137,37 @@ export default function AuthPage() {
     setCurrentSlide(next);
   };
 
-  const handlePrevSlide = (prev: Slide) => {
+  const handlePrevSlide = () => {
     setDirection(-1);
-    setCurrentSlide(prev);
-  };
-
-  const handleRoleSelection = (role: UserRole) => {
-    setUserRole(role);
-    handleNextSlide("authMethodSelection");
+    // Determine previous slide logically
+    if (currentSlide === 'authInput') setCurrentSlide('welcome');
+    else if (currentSlide === 'otpVerification') setCurrentSlide('authInput');
+    else if (currentSlide === 'completeProfile') {
+        if(authMethod === 'phone') setCurrentSlide('otpVerification');
+        else setCurrentSlide('authInput'); // Or welcome if Google was direct
+    }
   };
 
   const handleAuthMethodSelection = (method: AuthMethod) => {
     setAuthMethod(method);
     if (method === "phone") {
-      handleNextSlide("phoneInput");
+      handleNextSlide("authInput");
       setTimeout(() => {
         if (recaptchaContainerRef.current && !recaptchaVerifier) {
-             initializeRecaptcha();
+          initializeRecaptcha();
         }
       }, 100);
     } else if (method === "google") {
       handleGoogleAuth();
-    } else if (method === "email") {
-      handleNextSlide("emailAuth");
     }
   };
 
   const handleGoogleAuth = async () => {
-    if (!userRole) {
-      toast({ title: "Role Selection Required", description: "Please select if you are a creator or supporter first.", variant: "destructive" });
-      handlePrevSlide("roleSelection"); 
-      return;
-    }
     setIsLoading(true);
     try {
-      await signInWithGoogle(userRole);
-      // onAuthStateChanged will handle redirection or profile completion
+      // Google sign-in itself doesn't pre-define role. Role is set at profile completion.
+      await signInWithGoogle(isCreatorRole ? 'creator' : 'supporter'); // Pass a default or let profile completion decide
+      // onAuthStateChanged will trigger effect to check profile and move to completeProfile or dashboard
     } catch (error) {
       toast({ title: "Google Sign-In Failed", description: (error as Error).message, variant: "destructive" });
     } finally {
@@ -218,68 +175,28 @@ export default function AuthPage() {
     }
   };
 
-  const handleEmailAuth = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!userRole) {
-      toast({ title: "Role Selection Required", variant: "destructive" });
-      handlePrevSlide("roleSelection");
-      return;
-    }
-    if (emailAuthMode === 'signUp' && password !== confirmPassword) {
-      toast({ title: "Passwords Don't Match", variant: "destructive" });
-      return;
-    }
-    setIsLoading(true);
-    try {
-      if (emailAuthMode === 'signUp') {
-        await signUpWithEmailPassword(email, password, userRole);
-      } else {
-        await signInWithEmailPassword(email, password);
-      }
-      // onAuthStateChanged will handle redirection or profile completion
-    } catch (error: any) {
-      let friendlyMessage = "Authentication failed. Please try again.";
-      if (error.code === 'auth/email-already-in-use') {
-        friendlyMessage = 'This email is already in use. Try signing in or use a different email.';
-      } else if (error.code === 'auth/weak-password') {
-        friendlyMessage = 'Password is too weak. It should be at least 6 characters.';
-      } else if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
-        friendlyMessage = 'Invalid email or password.';
-      }
-      toast({ title: "Email Auth Failed", description: friendlyMessage, variant: "destructive" });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-
   const handleSendOtp = async (e: FormEvent) => {
     e.preventDefault();
-    if (!userRole) {
-      toast({ title: "Role Selection Required", variant: "destructive" });
-      handlePrevSlide("roleSelection");
-      return;
-    }
     if (!recaptchaVerifier) {
       toast({ title: "reCAPTCHA not ready", description: "Please wait for reCAPTCHA.", variant: "destructive" });
       await initializeRecaptcha(); return;
     }
     if (!phoneNumber.match(/^\+254[17]\d{8}$/)) {
-        toast({ title: "Invalid Phone Number", description: "Format: +2547XXXXXXXX or +2541XXXXXXXX.", variant: "destructive" });
-        return;
+      toast({ title: "Invalid Phone Number", description: "Format: +2547XXXXXXXX or +2541XXXXXXXX.", variant: "destructive" });
+      return;
     }
     setIsLoading(true);
     try {
-      const result = await signInWithPhone(phoneNumber, recaptchaVerifier, userRole);
+      const result = await signInWithPhone(phoneNumber, recaptchaVerifier, isCreatorRole ? 'creator' : 'supporter');
       setConfirmationResult(result);
-      setFormPhoneNumber(phoneNumber); 
+      setFormPhoneNumber(phoneNumber);
       toast({ title: "OTP Sent", description: "Please check your messages." });
       handleNextSlide("otpVerification");
     } catch (error) {
       toast({ title: "OTP Send Failed", description: (error as Error).message, variant: "destructive" });
       if ((window as any).recaptchaVerifierInstance) (window as any).recaptchaVerifierInstance.clear();
-      setRecaptchaVerifier(undefined); 
-      await initializeRecaptcha(); 
+      setRecaptchaVerifier(undefined);
+      await initializeRecaptcha();
     } finally {
       setIsLoading(false);
     }
@@ -290,20 +207,17 @@ export default function AuthPage() {
     if (!confirmationResult) {
       toast({ title: "Verification Error", variant: "destructive" }); return;
     }
-    if (!userRole) { 
-        toast({ title: "Role Selection Missing", variant: "destructive" }); return;
-    }
     setIsLoading(true);
     try {
-      await confirmOtp(confirmationResult, otp, userRole);
-      // onAuthStateChanged will handle redirection or profile completion
+      await confirmOtp(confirmationResult, otp, isCreatorRole ? 'creator' : 'supporter');
+      // onAuthStateChanged will handle profile check / redirection
     } catch (error) {
       toast({ title: "OTP Verification Failed", description: (error as Error).message, variant: "destructive" });
     } finally {
       setIsLoading(false);
     }
   };
-  
+
   const handleProfilePicChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
@@ -314,55 +228,60 @@ export default function AuthPage() {
 
   const handleProfileSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!firebaseUser || !userRole) {
-        toast({ title: "Error", description: "Authentication or role information missing.", variant: "destructive" });
-        return;
+    if (!firebaseUser) {
+      toast({ title: "Error", description: "Authentication information missing.", variant: "destructive" });
+      return;
     }
     if (!formPhoneNumber || !formPhoneNumber.match(/^\+254[17]\d{8}$/)) {
-        toast({ title: "Invalid Phone Number", description: "Phone number is required. Format: +2547XXXXXXXX or +2541XXXXXXXX.", variant: "destructive" });
-        return;
+      toast({ title: "Invalid Phone Number", description: "Phone number is required. Format: +2547XXXXXXXX or +2541XXXXXXXX.", variant: "destructive" });
+      return;
     }
     if (!username.trim()) {
-        toast({ title: "Username Required", description: "Please enter a username.", variant: "destructive" });
-        return;
+      toast({ title: "Username Required", description: "Please enter a username.", variant: "destructive" });
+      return;
+    }
+     if (!username.match(/^@?([a-zA-Z0-9_]+)$/)) {
+      toast({ title: "Invalid Username", description: "Username can contain letters, numbers, or underscores. Optional @ at start.", variant: "destructive"});
+      return;
     }
     if (!fullName.trim()) {
-        toast({ title: "Full Name Required", description: "Please enter your full name.", variant: "destructive" });
-        return;
+      toast({ title: "Full Name Required", description: "Please enter your full name.", variant: "destructive" });
+      return;
     }
 
-    const isCreatorProfile = userRole === 'creator';
-    if (isCreatorProfile) {
-        if (!tipHandle.match(/^@([a-zA-Z0-9_]+)$/)) {
-            toast({ title: "Invalid Tip Handle", description: "Tip Handle must start with @ and contain letters, numbers, or underscores.", variant: "destructive"});
-            return;
-        }
-        if (!category) {
-             toast({ title: "Creator Category Missing", description: "Category is required for creators.", variant: "destructive"});
-            return;
-        }
+    if (isCreatorRole) {
+      if (!tipHandle.match(/^@([a-zA-Z0-9_]+)$/)) {
+        toast({ title: "Invalid Tip Handle", description: "Tip Handle must start with @ and contain letters, numbers, or underscores.", variant: "destructive" });
+        return;
+      }
+      if (!category) {
+        toast({ title: "Creator Category Missing", description: "Category is required for creators.", variant: "destructive" });
+        return;
+      }
     }
     setIsLoading(true);
-    
+
     let finalProfilePicUrl = profilePicPreview || firebaseUser.photoURL || null;
     if (profilePicFile) {
-        const storageRefVal = ref(storage, `users/${firebaseUser.uid}/profile.${profilePicFile.name.split('.').pop()}`);
-        try {
-            const snapshot = await uploadBytes(storageRefVal, profilePicFile);
-            finalProfilePicUrl = await getDownloadURL(snapshot.ref);
-        } catch (error) {
-            toast({ title: "Image Upload Failed", description: (error as Error).message, variant: "destructive" }); setIsLoading(false); return;
-        }
+      const storageRefVal = ref(storage, `users/${firebaseUser.uid}/profile.${profilePicFile.name.split('.').pop()}`);
+      try {
+        const snapshot = await uploadBytes(storageRefVal, profilePicFile);
+        finalProfilePicUrl = await getDownloadURL(snapshot.ref);
+      } catch (error) {
+        toast({ title: "Image Upload Failed", description: (error as Error).message, variant: "destructive" }); setIsLoading(false); return;
+      }
     }
+    
+    const finalUsername = username.startsWith('@') ? username : `@${username}`;
 
     const profileDataForCompletion: Partial<User> = {
-        username: username.trim(),
-        fullName: fullName.trim(),
-        phoneNumber: formPhoneNumber,
-        profilePicUrl: finalProfilePicUrl,
-        isCreator: isCreatorProfile,
-        bio: bio.trim() || null,
-        ...(isCreatorProfile && { tipHandle: tipHandle.trim(), category: category }),
+      username: finalUsername,
+      fullName: fullName.trim(),
+      phoneNumber: formPhoneNumber, // This is now required
+      profilePicUrl: finalProfilePicUrl,
+      isCreator: isCreatorRole,
+      bio: bio.trim() || null,
+      ...(isCreatorRole && { tipHandle: tipHandle.trim(), category: category }),
     };
     
     const cleanedProfileData = Object.fromEntries(
@@ -371,15 +290,16 @@ export default function AuthPage() {
 
 
     try {
-        await completeUserProfile(cleanedProfileData, userRole);
-        toast({ title: "Profile Created! 🎉", description: "Welcome to TipKesho!" });
-        // Redirection is handled by onAuthStateChanged effect and AuthPage's main useEffect
+      await completeUserProfile(cleanedProfileData, isCreatorRole ? 'creator' : 'supporter');
+      toast({ title: "Profile Created! 🎉", description: "Welcome to TipKesho!" });
+      // Redirection is handled by onAuthStateChanged effect
     } catch (error) {
-        toast({ title: "Profile Creation Failed", description: (error as Error).message, variant: "destructive" });
+      toast({ title: "Profile Creation Failed", description: (error as Error).message, variant: "destructive" });
     } finally {
-        setIsLoading(false);
+      setIsLoading(false);
     }
   };
+
 
   if (authLoading || isRedirecting) {
     return (
@@ -393,119 +313,58 @@ export default function AuthPage() {
 
   const renderSlideContent = () => {
     switch (currentSlide) {
-      case "roleSelection":
+      case "welcome":
         return (
-            <>
+          <>
             <CardHeader className="text-center">
-                <div className="mx-auto mb-6"><Sparkles className="h-16 w-16 text-primary" /></div>
-                <CardTitle className="text-3xl font-bold">Join TipKesho As...</CardTitle>
-                <CardDescription>Are you here to support or to create?</CardDescription>
+              <div className="mx-auto mb-6"><Sparkles className="h-16 w-16 text-primary" /></div>
+              <CardTitle className="text-3xl font-bold">Support Your Favorite Kenyan Creators</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-                <Button onClick={() => handleRoleSelection("creator")} className="w-full text-lg py-8 bg-accent hover:bg-accent/90 text-accent-foreground">
-                <Briefcase className="mr-3 h-6 w-6" /> A Creator
-                </Button>
-                <Button onClick={() => handleRoleSelection("supporter")} className="w-full text-lg py-8 bg-primary hover:bg-primary/90 text-primary-foreground">
-                <Users className="mr-3 h-6 w-6" /> A Supporter
-                </Button>
+              <Button onClick={() => handleAuthMethodSelection("phone")} className="w-full text-lg py-6 bg-green-500 hover:bg-green-600 text-white">
+                <Phone className="mr-2 h-5 w-5" /> Continue with Phone
+              </Button>
+              <Button onClick={() => handleAuthMethodSelection("google")} variant="outline" className="w-full text-lg py-6">
+                <svg className="mr-2 h-5 w-5" width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M21.35,11.1H12.18V13.83H18.69C18.36,17.64 15.19,19.27 12.19,19.27C8.36,19.27 5,16.25 5,12C5,7.9 8.2,4.73 12.19,4.73C15.29,4.73 17.1,6.7 17.1,6.7L19,4.72C19,4.72 16.56,2 12.19,2C6.42,2 2.03,6.8 2.03,12C2.03,17.05 6.16,22 12.19,22C17.6,22 21.5,18.33 21.5,12.91C21.5,11.76 21.35,11.1 21.35,11.1V11.1Z" /></svg> Continue with Google
+              </Button>
             </CardContent>
-             <CardFooter className="text-center">
-                <p className="text-sm text-muted-foreground">Make your choice to continue.</p>
-             </CardFooter>
-            </>
+            <CardFooter className="justify-center">
+              <Button variant="link" className="text-primary" onClick={() => { setAuthMethod('email'); handleNextSlide('authInput'); }}> {/* Assuming email is another form of 'authInput' */}
+                Already have an account? Sign In
+              </Button>
+            </CardFooter>
+          </>
         );
-      case "authMethodSelection":
+      case "authInput": // This slide is for phone or email input
         return (
-            <>
-            <CardHeader className="text-center">
-                <Button variant="ghost" size="icon" className="absolute top-4 left-4" onClick={() => handlePrevSlide("roleSelection")}><ArrowLeft className="h-5 w-5" /></Button>
-                <div className="mx-auto mb-6"><HandCoins className="h-16 w-16 text-primary" /></div>
-                <CardTitle className="text-3xl font-bold text-primary">Get Started</CardTitle>
-                <CardDescription>Sign up or sign in as a {userRole}.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-                <Button onClick={() => handleAuthMethodSelection("phone")} className="w-full text-lg py-6 bg-green-500 hover:bg-green-600 text-white" disabled={isLoading || authLoading}>
-                    <Phone className="mr-2 h-5 w-5" /> Continue with Phone
-                </Button>
-                <Button onClick={() => handleAuthMethodSelection("google")} variant="outline" className="w-full text-lg py-6" disabled={isLoading || authLoading}>
-                     <svg className="mr-2 h-5 w-5" width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M21.35,11.1H12.18V13.83H18.69C18.36,17.64 15.19,19.27 12.19,19.27C8.36,19.27 5,16.25 5,12C5,7.9 8.2,4.73 12.19,4.73C15.29,4.73 17.1,6.7 17.1,6.7L19,4.72C19,4.72 16.56,2 12.19,2C6.42,2 2.03,6.8 2.03,12C2.03,17.05 6.16,22 12.19,22C17.6,22 21.5,18.33 21.5,12.91C21.5,11.76 21.35,11.1 21.35,11.1V11.1Z" /></svg> Continue with Google
-                </Button>
-                <Button onClick={() => handleAuthMethodSelection("email")} variant="outline" className="w-full text-lg py-6" disabled={isLoading || authLoading}>
-                    <Mail className="mr-2 h-5 w-5" /> Continue with Email
-                </Button>
-            </CardContent>
-             <CardFooter className="flex-col space-y-2 text-center">
-                <p className="text-sm text-muted-foreground">
-                    By continuing, you agree to TipKesho&apos;s <br/>
-                    <Link href="/terms" className="underline hover:text-primary">Terms</Link> & <Link href="/privacy" className="underline hover:text-primary">Privacy</Link>.
-                </p>
-             </CardFooter>
-            </>
-        );
-        case "emailAuth":
-          return (
-            <>
-              <CardHeader>
-                <Button variant="ghost" size="icon" className="absolute top-4 left-4" onClick={() => handlePrevSlide("authMethodSelection")}><ArrowLeft className="h-5 w-5" /></Button>
-                <CardTitle className="text-2xl pt-8 text-center">{emailAuthMode === 'signUp' ? 'Sign Up with Email' : 'Sign In with Email'}</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <form onSubmit={handleEmailAuth} className="space-y-6">
-                  <div className="space-y-2">
-                    <Label htmlFor="email-auth-email">Email</Label>
-                    <Input id="email-auth-email" type="email" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} required className="text-lg p-4"/>
-                  </div>
-                  <div className="space-y-2 relative">
-                    <Label htmlFor="email-auth-password">Password</Label>
-                    <Input id="email-auth-password" type={showPassword ? "text" : "password"} placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} required className="text-lg p-4"/>
-                    <Button type="button" variant="ghost" size="icon" className="absolute right-2 top-8" onClick={() => setShowPassword(!showPassword)}>
-                      {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                    </Button>
-                  </div>
-                  {emailAuthMode === 'signUp' && (
-                    <div className="space-y-2 relative">
-                      <Label htmlFor="email-auth-confirmPassword">Confirm Password</Label>
-                      <Input id="email-auth-confirmPassword" type={showConfirmPassword ? "text" : "password"} placeholder="••••••••" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required className="text-lg p-4"/>
-                      <Button type="button" variant="ghost" size="icon" className="absolute right-2 top-8" onClick={() => setShowConfirmPassword(!showConfirmPassword)}>
-                        {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                      </Button>
-                    </div>
-                  )}
-                  <Button type="submit" className="w-full text-lg py-6 bg-primary" disabled={isLoading || authLoading}>
-                    {isLoading ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : (emailAuthMode === 'signUp' ? 'Sign Up' : 'Sign In')}
-                  </Button>
-                  <Button variant="link" className="w-full text-primary" onClick={() => setEmailAuthMode(emailAuthMode === 'signUp' ? 'signIn' : 'signUp')}>
-                    {emailAuthMode === 'signUp' ? 'Already have an account? Sign In' : "Don't have an account? Sign Up"}
-                  </Button>
-                </form>
-              </CardContent>
-            </>
-          );
-      case "phoneInput":
-        return (
-            <>
+          <>
             <CardHeader>
-               <Button variant="ghost" size="icon" className="absolute top-4 left-4" onClick={() => handlePrevSlide("authMethodSelection")}><ArrowLeft className="h-5 w-5" /></Button>
-              <CardTitle className="text-2xl pt-8 text-center">Enter Phone Number</CardTitle>
+              <Button variant="ghost" size="icon" className="absolute top-4 left-4" onClick={handlePrevSlide}><ArrowLeft className="h-5 w-5" /></Button>
+              <CardTitle className="text-2xl pt-8 text-center">
+                {authMethod === 'phone' ? 'Enter Phone Number' : 'Sign In / Sign Up with Email'}
+              </CardTitle>
             </CardHeader>
             <CardContent>
-              <form onSubmit={handleSendOtp} className="space-y-6">
-                <div className="space-y-2">
-                  <Label htmlFor="phone-otp-input">Phone (e.g. +254712345678)</Label>
-                  <Input id="phone-otp-input" type="tel" placeholder="+254 XXX XXX XXX" value={phoneNumber} onChange={(e) => setPhoneNumber(e.target.value)} required className="text-lg p-4"/>
-                </div>
-                <Button type="submit" className="w-full text-lg py-6 bg-primary" disabled={isLoading || authLoading || !recaptchaVerifier}>
-                  {isLoading ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : "Send OTP"}
-                </Button>
-              </form>
+              {authMethod === 'phone' && (
+                <form onSubmit={handleSendOtp} className="space-y-6">
+                  <div className="space-y-2">
+                    <Label htmlFor="phone-input">Phone (e.g. +254712345678)</Label>
+                    <Input id="phone-input" type="tel" placeholder="+254 XXX XXX XXX" value={phoneNumber} onChange={(e) => setPhoneNumber(e.target.value)} required className="text-lg p-4" />
+                  </div>
+                  <Button type="submit" className="w-full text-lg py-6 bg-primary" disabled={isLoading || authLoading || !recaptchaVerifier}>
+                    {isLoading ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : "Send OTP"}
+                  </Button>
+                </form>
+              )}
+              {/* Add Email Auth Form here if authMethod === 'email' */}
             </CardContent>
-            </>
+          </>
         );
       case "otpVerification":
         return (
-            <>
+          <>
             <CardHeader>
-              <Button variant="ghost" size="icon" className="absolute top-4 left-4" onClick={() => handlePrevSlide("phoneInput")}><ArrowLeft className="h-5 w-5" /></Button>
+              <Button variant="ghost" size="icon" className="absolute top-4 left-4" onClick={handlePrevSlide}><ArrowLeft className="h-5 w-5" /></Button>
               <CardTitle className="text-2xl pt-8 text-center">Verify OTP</CardTitle>
               <CardDescription className="text-center">Enter 6-digit code sent to {phoneNumber}</CardDescription>
             </CardHeader>
@@ -513,90 +372,84 @@ export default function AuthPage() {
               <form onSubmit={handleVerifyOtp} className="space-y-6">
                 <div className="space-y-2">
                   <Label htmlFor="otp">OTP Code</Label>
-                  <Input id="otp" type="text" maxLength={6} placeholder="XXXXXX" value={otp} onChange={(e) => setOtp(e.target.value)} required className="text-lg p-4 text-center tracking-[0.5em]"/>
+                  <Input id="otp" type="text" maxLength={6} placeholder="XXXXXX" value={otp} onChange={(e) => setOtp(e.target.value)} required className="text-lg p-4 text-center tracking-[0.5em]" />
                 </div>
                 <Button type="submit" className="w-full text-lg py-6 bg-primary" disabled={isLoading || authLoading}>
                   {isLoading ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <ShieldCheck className="mr-2 h-5 w-5" />} Verify
                 </Button>
-                 <Button variant="link" className="w-full text-primary" onClick={handleSendOtp} disabled={isLoading || authLoading || !recaptchaVerifier}>
+                <Button variant="link" className="w-full text-primary" onClick={handleSendOtp} disabled={isLoading || authLoading || !recaptchaVerifier}>
                   Resend Code
                 </Button>
               </form>
             </CardContent>
-            </>
+          </>
         );
       case "completeProfile":
         return (
-            <>
+          <>
             <CardHeader>
-               <Button variant="ghost" size="icon" className="absolute top-4 left-4" onClick={() => handlePrevSlide(authMethod === "phone" ? "otpVerification" : (authMethod === "email" ? "emailAuth" : "authMethodSelection"))}><ArrowLeft className="h-5 w-5" /></Button>
+              <Button variant="ghost" size="icon" className="absolute top-4 left-4" onClick={handlePrevSlide}><ArrowLeft className="h-5 w-5" /></Button>
               <CardTitle className="text-2xl pt-8 text-center">Complete Your Profile</CardTitle>
-              <CardDescription className="text-center">You&apos;re joining as a {userRole}.</CardDescription>
             </CardHeader>
             <CardContent>
               <form onSubmit={handleProfileSubmit} className="space-y-4">
-                 <div className="flex flex-col items-center space-y-3">
-                    {profilePicPreview ? (
-                      <Image src={profilePicPreview} alt="Profile Preview" width={100} height={100} data-ai-hint="profile avatar" className="rounded-full object-cover h-24 w-24 border-2 border-primary"/>
-                    ) : (
-                      <div className="h-24 w-24 rounded-full bg-muted flex items-center justify-center border-2 border-dashed border-primary">
-                        <UserPlus className="h-10 w-10 text-muted-foreground" />
-                      </div>
-                    )}
-                    <Input id="profilePic" type="file" accept="image/*" onChange={handleProfilePicChange} className="text-sm file:mr-2 file:py-1 file:px-2 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20"/>
+                <div className="flex flex-col items-center space-y-3">
+                  {profilePicPreview ? (
+                    <Image src={profilePicPreview} alt="Profile Preview" width={100} height={100} data-ai-hint="profile avatar" className="rounded-full object-cover h-24 w-24 border-2 border-primary" />
+                  ) : (
+                    <div className="h-24 w-24 rounded-full bg-muted flex items-center justify-center border-2 border-dashed border-primary">
+                      <UserPlus className="h-10 w-10 text-muted-foreground" />
+                    </div>
+                  )}
+                  <Input id="profilePic" type="file" accept="image/*" onChange={handleProfilePicChange} className="text-sm file:mr-2 file:py-1 file:px-2 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20" />
                 </div>
                 <div className="space-y-1">
                   <Label htmlFor="username">Username (@handle)</Label>
-                  <Input id="username" placeholder="@your_handle" value={username} onChange={(e) => setUsername(e.target.value)} required className="text-lg p-3"/>
+                  <Input id="username" placeholder="@your_handle" value={username} onChange={(e) => setUsername(e.target.value)} required className="text-lg p-3" />
                 </div>
                 <div className="space-y-1">
                   <Label htmlFor="fullName">Full Name</Label>
-                  <Input id="fullName" placeholder="Your Full Name" value={fullName} onChange={(e) => setFullName(e.target.value)} required className="text-lg p-3"/>
+                  <Input id="fullName" placeholder="Your Full Name" value={fullName} onChange={(e) => setFullName(e.target.value)} required className="text-lg p-3" />
                 </div>
-                <div className="space-y-1">
+                 <div className="space-y-1">
                   <Label htmlFor="formPhoneNumber">Phone Number (e.g. +2547XXXXXXXX)</Label>
-                  <Input 
-                    id="formPhoneNumber" 
-                    type="tel" 
-                    placeholder="+2547XXXXXXXX" 
-                    value={formPhoneNumber} 
-                    onChange={(e) => setFormPhoneNumber(e.target.value)} 
-                    required 
+                  <Input
+                    id="formPhoneNumber"
+                    type="tel"
+                    placeholder="+2547XXXXXXXX"
+                    value={formPhoneNumber}
+                    onChange={(e) => setFormPhoneNumber(e.target.value)}
+                    required
                     className="text-lg p-3"
                   />
                 </div>
                 <div className="space-y-1">
                   <Label htmlFor="bio">Bio (Optional)</Label>
-                  <Textarea id="bio" placeholder="Tell us a bit about yourself..." value={bio} onChange={(e) => setBio(e.target.value)} className="text-lg p-3" rows={3}/>
+                  <Textarea id="bio" placeholder="Tell us a bit about yourself..." value={bio} onChange={(e) => setBio(e.target.value)} className="text-lg p-3" rows={3} />
                 </div>
-                
                 <div className="flex items-center space-x-2 pt-2">
-                  <Switch id="isCreatorSwitch" checked={userRole === 'creator'} disabled/> 
-                  <Label htmlFor="isCreatorSwitch" className="text-base">
-                    {userRole === 'creator' ? "Registered as Creator" : "Registered as Supporter"}
-                  </Label>
+                  <Switch id="isCreatorSwitch" checked={isCreatorRole} onCheckedChange={setIsCreatorRole} />
+                  <Label htmlFor="isCreatorSwitch" className="text-base">I&apos;m a Creator</Label>
                 </div>
-
-                {userRole === 'creator' && (
+                {isCreatorRole && (
                   <>
                     <div className="space-y-1">
                       <Label htmlFor="tipHandle">Creator Tip Handle (e.g., @MyCreations)</Label>
-                      <Input id="tipHandle" placeholder="@MyCreations" value={tipHandle} onChange={(e) => setTipHandle(e.target.value)} required={userRole === 'creator'} className="text-lg p-3"/>
+                      <Input id="tipHandle" placeholder="@MyCreations" value={tipHandle} onChange={(e) => setTipHandle(e.target.value)} required={isCreatorRole} className="text-lg p-3" />
                     </div>
                     <div className="space-y-1">
                       <Label htmlFor="category">Creator Category</Label>
-                      <Input id="category" placeholder="e.g., Art, Music, Dance" value={category} onChange={(e) => setCategory(e.target.value)} required={userRole === 'creator'} className="text-lg p-3"/>
+                      <Input id="category" placeholder="e.g., Art, Music, Dance" value={category} onChange={(e) => setCategory(e.target.value)} required={isCreatorRole} className="text-lg p-3" />
                     </div>
                   </>
                 )}
-
                 <Button type="submit" className="w-full text-lg py-6 bg-accent hover:bg-accent/90 text-accent-foreground" disabled={isLoading || authLoading}>
                   {isLoading ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <CheckCircle className="mr-2 h-5 w-5" />}
                   Submit &amp; Go 🎉
                 </Button>
               </form>
             </CardContent>
-            </>
+          </>
         );
       default:
         return null;
@@ -607,13 +460,13 @@ export default function AuthPage() {
     <div className="flex items-center justify-center min-h-[calc(100vh-8rem)] py-8">
       <Card className="w-full max-w-md shadow-xl overflow-hidden relative">
         <AnimatePresence initial={false} custom={direction} mode="wait">
-          <motion.div 
-            key={currentSlide} 
-            custom={direction} 
-            variants={slideVariants} 
-            initial="initial" 
-            animate="animate" 
-            exit="exit" 
+          <motion.div
+            key={currentSlide}
+            custom={direction}
+            variants={slideVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
             className="w-full"
           >
             {renderSlideContent()}

@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { AuthUser, User, Creator } from '@/types'; // Added Creator type
@@ -49,20 +50,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const userDocSnap = await getDoc(userDocRef);
         if (userDocSnap.exists()) {
           const userData = userDocSnap.data();
-          setUser({ 
+          const localUser = { 
             id: fbUser.uid, 
             ...userData,
+            // Convert Firestore Timestamps to ISO strings for client-side consistency
             createdAt: userData.createdAt instanceof Timestamp ? userData.createdAt.toDate().toISOString() : userData.createdAt,
             updatedAt: userData.updatedAt instanceof Timestamp ? userData.updatedAt.toDate().toISOString() : userData.updatedAt,
-          } as AuthUser);
+          } as AuthUser;
+          setUser(localUser);
+          // Redirection logic moved to page components based on user profile status
         } else {
+          // User exists in Firebase Auth but not in Firestore (e.g., first time Google/Phone sign-in)
+          // This state indicates profile needs completion.
           setUser({ 
             id: fbUser.uid, 
             email: fbUser.email || null, 
-            phoneNumber: fbUser.phoneNumber || null,
+            phoneNumber: fbUser.phoneNumber || null, // May be null
             profilePicUrl: fbUser.photoURL || null,
-            isCreator: false, // Default, this will be updated by completeUserProfile or become-creator flow
-            createdAt: new Date().toISOString(), // Placeholder, actual value set on doc creation
+            isCreator: false, // Default, will be set during profile completion
+            createdAt: new Date().toISOString(), // Placeholder
           } as AuthUser);
         }
       } else {
@@ -77,23 +83,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const userDocRef = doc(db, "users", fbUser.uid);
     const userDocSnap = await getDoc(userDocRef);
 
-    if (!userDocSnap.exists() || !userDocSnap.data()?.createdAt) { // Ensure we only write initial data once
+    if (!userDocSnap.exists() || !userDocSnap.data()?.createdAt) { 
       const initialUserData: Partial<User> = {
-          email: fbUser.email || null,
+          email: fbUser.email || additionalData?.email || null,
           fullName: fbUser.displayName || additionalData?.fullName || null,
           profilePicUrl: fbUser.photoURL || additionalData?.profilePicUrl || null,
-          // phoneNumber is critical. If it's from phone auth, additionalData.phoneNumber should be it.
-          // If Google/Email auth, it might be null initially and set during completeProfile.
           phoneNumber: fbUser.phoneNumber || additionalData?.phoneNumber || null, 
           isCreator: userRole === 'creator',
           username: additionalData?.username || null,
           bio: additionalData?.bio || null,
-          tipHandle: userRole === 'creator' ? (additionalData?.tipHandle || null) : undefined, // Undefined for non-creators
-          category: userRole === 'creator' ? (additionalData?.category || null) : undefined, // Undefined for non-creators
+          tipHandle: userRole === 'creator' ? (additionalData?.tipHandle || null) : undefined,
+          category: userRole === 'creator' ? (additionalData?.category || null) : undefined,
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
       };
-      // Remove fields that are explicitly undefined (e.g. tipHandle for non-creators)
+      
       const dataToWrite = Object.fromEntries(Object.entries(initialUserData).filter(([_, v]) => v !== undefined));
       await setDoc(userDocRef, dataToWrite, { merge: true });
       return dataToWrite as User;
@@ -106,11 +110,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const provider = new GoogleAuthProvider();
     try {
       const result = await signInWithPopup(auth, provider);
-      await createInitialUserDocument(result.user, userRole);
+      await createInitialUserDocument(result.user, userRole); // Role here is tentative until profile completion
     } catch (error) {
       console.error("Error signing in with Google: ", error);
       throw error;
     }
+    // setLoading(false); // Managed by onAuthStateChanged
   };
 
   const signUpWithEmailPassword = async (email: string, password: string, userRole: 'creator' | 'supporter', additionalData?: Partial<User>) => {
@@ -123,17 +128,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.error("Error signing up with email: ", error);
       throw error;
     }
+    // setLoading(false);
   };
   
   const signInWithEmailPassword = async (email: string, password: string) => {
     setLoading(true);
     try {
       const result = await signInWithEmailAndPassword(auth, email, password);
+      // Firestore doc should already exist or be handled by onAuthStateChanged logic if first time
       return result.user;
     } catch (error) {
       console.error("Error signing in with email: ", error);
       throw error;
     }
+    // setLoading(false);
   };
   
   const setUpRecaptcha = async (elementId: string): Promise<RecaptchaVerifier | undefined> => {
@@ -148,7 +156,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             'expired-callback': () => {}
         });
         (window as any).recaptchaVerifierInstance = recaptchaVerifier;
-        await recaptchaVerifier.render();
+        await recaptchaVerifier.render(); // Ensure it renders before returning
         return recaptchaVerifier;
     } catch (error) {
         console.error("Error setting up reCAPTCHA:", error);
@@ -160,25 +168,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     try {
       const confirmationResult = await signInWithPhoneNumber(auth, phoneNumber, appVerifier);
-      (window as any).pendingUserRole = userRole; 
+      // Temporarily store userRole if needed, or pass to confirmOtp
       return confirmationResult;
     } catch (error) {
       console.error("Error sending OTP:", error);
       throw error;
     }
+    // setLoading(false);
   };
 
   const confirmOtp = async (confirmationResult: ConfirmationResult, otp: string, userRole: 'creator' | 'supporter') => {
     setLoading(true);
     try {
       const result = await confirmationResult.confirm(otp);
-      // Pass the phone number explicitly if available from result.user to createInitialUserDocument
       await createInitialUserDocument(result.user, userRole, { phoneNumber: result.user.phoneNumber || undefined });
       return result.user;
     } catch (error) {
       console.error("Error confirming OTP:", error);
       throw error;
     }
+    // setLoading(false);
   };
 
   const completeUserProfile = async (profileData: Partial<User>, userRole: 'creator' | 'supporter') => {
@@ -187,20 +196,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const userDocRef = doc(db, "users", firebaseUser.uid);
     try {
       const dataForUserDoc: Partial<User> = {
-        updatedAt: serverTimestamp(),
+        // Ensure required fields are present, falling back to null if explicitly not provided
+        fullName: profileData.fullName || null,
+        username: profileData.username || null,
+        phoneNumber: profileData.phoneNumber || null, // Crucial: ensure this is set
+        profilePicUrl: profileData.profilePicUrl === undefined ? (firebaseUser.photoURL || null) : profileData.profilePicUrl,
+        bio: profileData.bio === undefined ? null : profileData.bio,
         isCreator: userRole === 'creator',
+        updatedAt: serverTimestamp(),
       };
-
-      // Required fields from form (profileData), ensure they are not undefined
-      dataForUserDoc.phoneNumber = profileData.phoneNumber || null; // Critical: ensure not undefined
-      dataForUserDoc.fullName = profileData.fullName || null;
-      dataForUserDoc.username = profileData.username || null;
-
-      // Optional fields
-      dataForUserDoc.bio = profileData.bio === undefined ? null : profileData.bio;
-      dataForUserDoc.profilePicUrl = profileData.profilePicUrl === undefined ? (firebaseUser.photoURL || null) : profileData.profilePicUrl;
       
-      // Email from Firebase Auth, should not be changed by this form usually
+      // Email from Firebase Auth, or if provided (e.g. if auth method doesn't give email)
       dataForUserDoc.email = firebaseUser.email || profileData.email || null;
 
       const userDocSnap = await getDoc(userDocRef);
@@ -209,29 +215,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       if (userRole === 'creator') {
-          dataForUserDoc.tipHandle = profileData.tipHandle || null; // Required for creators
-          dataForUserDoc.category = profileData.category || null; // Required for creators
+          dataForUserDoc.tipHandle = profileData.tipHandle || null;
+          dataForUserDoc.category = profileData.category || null;
       }
       
-      // Remove any top-level undefined values before writing
       const cleanedDataForUserDoc = Object.fromEntries(Object.entries(dataForUserDoc).filter(([_, v]) => v !== undefined)) as Partial<User>;
       await setDoc(userDocRef, cleanedDataForUserDoc, { merge: true });
       
       if (userRole === 'creator' && cleanedDataForUserDoc.isCreator) {
         const creatorDocRef = doc(db, "creators", firebaseUser.uid);
-        const creatorDocSnap = await getDoc(creatorDocRef); // Fetch existing to preserve stats
+        const creatorDocSnap = await getDoc(creatorDocRef);
 
         const dataForCreatorDoc: Partial<Creator> = {
           userId: firebaseUser.uid,
           active: true,
           featured: false,
-          tipHandle: cleanedDataForUserDoc.tipHandle!, // Should be present if creator
-          category: cleanedDataForUserDoc.category!, // Should be present if creator
+          tipHandle: cleanedDataForUserDoc.tipHandle!,
+          category: cleanedDataForUserDoc.category!,
           fullName: cleanedDataForUserDoc.fullName,
           profilePicUrl: cleanedDataForUserDoc.profilePicUrl,
           bio: cleanedDataForUserDoc.bio,
           email: cleanedDataForUserDoc.email,
-          phoneNumber: cleanedDataForUserDoc.phoneNumber, // From user doc
+          phoneNumber: cleanedDataForUserDoc.phoneNumber,
           totalTips: creatorDocSnap.data()?.totalTips || 0,
           totalAmountReceived: creatorDocSnap.data()?.totalAmountReceived || 0,
           socialLinks: creatorDocSnap.data()?.socialLinks || [],
@@ -243,19 +248,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           dataForCreatorDoc.createdAt = serverTimestamp();
         }
         
-        const cleanedDataForCreatorDoc = Object.fromEntries(Object.entries(dataForCreatorDoc).filter(([_, v]) => v !== undefined)) as Partial<Creator>;
+        const cleanedDataForCreatorDoc = Object.fromEntries(Object.entries(dataForCreatorDoc).filter(([_,v]) => v !== undefined)) as Partial<Creator>;
         await setDoc(creatorDocRef, cleanedDataForCreatorDoc, { merge: true });
       }
       
       const updatedUserDoc = await getDoc(userDocRef);
       if (updatedUserDoc.exists()) {
         const newUserData = updatedUserDoc.data();
-        setUser({ 
+        const localUser = { 
             id: firebaseUser.uid, 
             ...newUserData,
             createdAt: newUserData.createdAt instanceof Timestamp ? newUserData.createdAt.toDate().toISOString() : newUserData.createdAt,
             updatedAt: newUserData.updatedAt instanceof Timestamp ? newUserData.updatedAt.toDate().toISOString() : newUserData.updatedAt,
-         } as AuthUser);
+         } as AuthUser;
+        setUser(localUser);
+        // Redirect after profile completion
+        router.push(localUser.isCreator ? "/creator/dashboard" : "/dashboard");
       }
 
     } catch (error) {
@@ -267,36 +275,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
   
   const updateUserFirestoreProfile = async (userId: string, data: Partial<User>) => {
-    setLoading(true);
+    // setLoading(true); // Avoid race condition with main loading state if not careful
     try {
       const userDocRef = doc(db, "users", userId);
-      const updateData: { [key: string]: any } = { updatedAt: serverTimestamp() };
+      const updatePayload: { [key: string]: any } = { updatedAt: serverTimestamp() };
 
       (Object.keys(data) as Array<keyof User>).forEach(key => {
-        if (data[key] !== undefined) {
-          updateData[key] = data[key] === undefined ? null : data[key]; // Ensure undefined becomes null
+        if (data[key] !== undefined) { // Only include defined values
+          updatePayload[key] = data[key];
         }
       });
       
-      // Filter out any fields that are still undefined (shouldn't happen with above logic)
-      const finalUpdateData = Object.fromEntries(Object.entries(updateData).filter(([_, v]) => v !== undefined));
+      await updateDoc(userDocRef, updatePayload);
+      
+      // Optimistically update local user state
+      setUser(prevUser => {
+        if (!prevUser || prevUser.id !== userId) return prevUser;
+        // Create a new object for the updated user
+        const updatedLocalUser = { ...prevUser, ...updatePayload };
+        // Ensure timestamps are strings for local state if they were serverTimestamps
+        if (updatePayload.updatedAt === serverTimestamp()) {
+          updatedLocalUser.updatedAt = new Date().toISOString();
+        }
+        return updatedLocalUser as AuthUser;
+      });
+
+      const currentUserDataSnap = await getDoc(userDocRef);
+      const currentUserData = currentUserDataSnap.data() as User | undefined;
 
 
-      await updateDoc(userDocRef, finalUpdateData);
-      setUser(prevUser => prevUser ? ({ ...prevUser, ...finalUpdateData, updatedAt: new Date().toISOString() } as AuthUser) : null);
-
-      const currentUser = user || (await getDoc(userDocRef).then(snap => snap.data() as AuthUser | null));
-
-      if (currentUser?.isCreator) {
+      if (currentUserData?.isCreator) {
           const creatorUpdates: Partial<Creator> = { updatedAt: serverTimestamp() };
-          if (finalUpdateData.fullName !== undefined) creatorUpdates.fullName = finalUpdateData.fullName;
-          if (finalUpdateData.profilePicUrl !== undefined) creatorUpdates.profilePicUrl = finalUpdateData.profilePicUrl;
-          if (finalUpdateData.bio !== undefined) creatorUpdates.bio = finalUpdateData.bio;
-          // tipHandle and category are usually part of creator profile specific edits, not general user profile update.
-          // if (finalUpdateData.tipHandle !== undefined) creatorUpdates.tipHandle = finalUpdateData.tipHandle;
-          // if (finalUpdateData.category !== undefined) creatorUpdates.category = finalUpdateData.category;
+          if (updatePayload.fullName !== undefined) creatorUpdates.fullName = updatePayload.fullName;
+          if (updatePayload.profilePicUrl !== undefined) creatorUpdates.profilePicUrl = updatePayload.profilePicUrl;
+          if (updatePayload.bio !== undefined) creatorUpdates.bio = updatePayload.bio;
           
-          if (Object.keys(creatorUpdates).length > 1) { // more than just updatedAt
+          if (Object.keys(creatorUpdates).length > 1) { 
               const creatorDocRef = doc(db, "creators", userId);
               await updateDoc(creatorDocRef, creatorUpdates);
           }
@@ -306,7 +320,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.error("Error updating user profile in Firestore:", error);
       throw error;
     } finally {
-      setLoading(false);
+      // setLoading(false);
     }
   };
 
@@ -314,9 +328,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     try {
       await firebaseSignOut(auth);
+      setUser(null); // Clear local user state
+      router.push('/'); // Redirect to home after sign out
     } catch (error) {
       console.error("Error signing out: ", error);
       throw error;
+    } finally {
+      setLoading(false);
     }
   };
 

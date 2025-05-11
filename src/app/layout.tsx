@@ -1,3 +1,4 @@
+
 import type { Metadata } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
 import './globals.css';
@@ -5,7 +6,8 @@ import { Navbar } from '@/components/navigation/navbar';
 import { Footer } from '@/components/navigation/footer';
 import { Toaster } from "@/components/ui/toaster";
 import { AuthProvider } from '@/hooks/use-auth';
-// import { ThemeProvider } from "@/components/theme-provider"; // Placeholder for future theme switching
+import { AppRouterRedirect } from '@/components/app-router-redirect';
+
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -29,9 +31,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${geistSans.variable} ${geistMono.variable} flex flex-col min-h-screen`}>
-        {/* <ThemeProvider attribute="class" defaultTheme="system" enableSystem> */}
+      <body className={`${geistSans.variable} ${geistMono.variable} flex flex-col min-h-screen bg-background text-foreground`}>
           <AuthProvider>
+            <AppRouterRedirect />
             <Navbar />
             <main className="flex-grow container mx-auto px-4 py-8">
               {children}
@@ -39,7 +41,6 @@ export default function RootLayout({
             <Footer />
             <Toaster />
           </AuthProvider>
-        {/* </ThemeProvider> */}
       </body>
     </html>
   );

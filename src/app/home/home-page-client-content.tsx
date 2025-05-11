@@ -1,8 +1,6 @@
 
 "use client";
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,36 +13,20 @@ import { FeaturedCreatorsClient } from "./featured-creators-client";
 import { PlatformHighlights } from "@/components/home/platform-highlights";
 import type { Creator } from '@/types';
 import { cn } from "@/lib/utils";
-import { useAuth } from '@/hooks/use-auth';
+import { useAuth } from '@/hooks/use-auth'; // Keep useAuth for potential UI changes based on auth state
 
 interface HomePageClientContentProps {
   featuredCreatorsData: Creator[];
 }
 
 export function HomePageClientContent({ featuredCreatorsData }: HomePageClientContentProps) {
-  const { user, firebaseUser, loading: authLoading } = useAuth();
-  const router = useRouter();
-  const [isRedirecting, setIsRedirecting] = useState(true); // Start true to show loader initially
+  const { loading: authLoading } = useAuth(); // Still might want to show a loader if content depends on auth indirectly
 
-  useEffect(() => {
-    if (!authLoading) {
-      if (user && user.fullName && user.phoneNumber) { // Fully profiled user
-        router.push('/dashboard');
-        // setIsRedirecting will remain true until navigation occurs
-      } else if (firebaseUser) { // Logged in but profile incomplete
-        router.push('/auth');
-        // setIsRedirecting will remain true
-      } else { // Not logged in, or auth state still resolving but no firebaseUser
-        setIsRedirecting(false); // Allow home page content to render
-      }
-    }
-  }, [user, firebaseUser, authLoading, router]);
-
-  if (authLoading || isRedirecting) {
+  if (authLoading) { // This loader is for content that might depend on non-redirect auth checks
     return (
       <div className="flex flex-col items-center justify-center min-h-[calc(100vh-10rem)]">
         <Loader2 className="h-16 w-16 animate-spin text-primary" />
-        <p className="mt-4 text-lg text-muted-foreground">Loading your experience...</p>
+        <p className="mt-4 text-lg text-muted-foreground">Loading home content...</p>
       </div>
     );
   }
@@ -300,4 +282,3 @@ export function HomePageClientContent({ featuredCreatorsData }: HomePageClientCo
     </div>
   );
 }
-

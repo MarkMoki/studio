@@ -4,26 +4,57 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Users
+    // Users: General user profile data
     match /users/{userId} {
-      allow read, update, delete: if request.auth != null && request.auth.uid == userId;
-      allow create: if request.auth != null;
+      // Users can read their own profile
+      allow read: if request.auth != null && request.auth.uid == userId;
+      // Users can create their own profile upon signup
+      // Users can update their own profile (e.g., fullName, username, bio, profilePicUrl)
+      // isCreator, tipHandle, category are managed through specific flows (become creator, creator settings)
+      // and should have tighter controls if updated directly here.
+      allow create, update: if request.auth != null && request.auth.uid == userId;
+      // Users can delete their own account (data)
+      allow delete: if request.auth != null && request.auth.uid == userId;
     }
 
-    // Creators
+    // Creators: Public creator profiles and specific creator data
     match /creators/{creatorId} {
+      // Anyone can read creator profiles
       allow read: if true;
+      // Only the authenticated user who is the creator can create/update their profile
+      // Ensure the userId field in the creator document matches the authenticated user's UID
       allow create, update: if request.auth != null &&
                             request.auth.uid == creatorId &&
-                            request.resource.data.userId == request.auth.uid;
+                            request.resource.data.userId == request.auth.uid &&
+                            (request.resource.data.isCreator == true || resource.data.isCreator == true); // Ensure they are marked as creator
+
+      // Deleting creator profiles might have other implications (e.g., tips linked), handle with care or disable direct delete.
+      // For now, allow creator to delete their own creator profile.
+      allow delete: if request.auth != null && request.auth.uid == creatorId;
     }
 
-    // Tips
+    // Tips: Records of tips sent from supporters to creators
     match /tips/{tipId} {
+      // Only authenticated users can create a tip
+      // The 'fromUserId' in the tip document must match the authenticated user's UID
       allow create: if request.auth != null &&
                     request.auth.uid == request.resource.data.fromUserId;
+
+      // Users can read tips they sent or received
       allow read: if request.auth != null &&
                   (request.auth.uid == resource.data.fromUserId || request.auth.uid == resource.data.toCreatorId);
+      
+      // Tips are generally immutable once created. Updates might be for status if payment processing is involved.
+      // For now, no updates allowed to prevent tampering.
+      allow update, delete: if false; 
     }
+
+    // Optional: Add rules for other collections like 'withdrawals' if needed.
+    // match /withdrawals/{withdrawalId} {
+    //   // Example: only creator can create/read their withdrawals
+    //   allow create: if request.auth != null && request.auth.uid == request.resource.data.creatorId;
+    //   allow read: if request.auth != null && request.auth.uid == resource.data.creatorId;
+    //   allow update: if false; // e.g. status updated by admin/backend function
+    // }
   }
 }

@@ -11,14 +11,21 @@ const firebaseConfig: FirebaseOptions = {
   apiKey: "AIzaSyCt6woSQjjpiFupLgNb_QvXg_FZc6tYwpI",
   authDomain: "tipkesho-b8e63.firebaseapp.com",
   projectId: "tipkesho-b8e63",
-  storageBucket: "tipkesho-b8e63.appspot.com", // Corrected common pattern, user had .firebasestorage.app
+  storageBucket: "tipkesho-b8e63.appspot.com",
   messagingSenderId: "714230357930",
   appId: "1:714230357930:web:1c5f2cafb9d6f0173355d3",
   measurementId: "G-GKDNVSLGTB"
 };
 
+
 // Initialize Firebase
-const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+let app;
+if (!getApps().length) {
+  app = initializeApp(firebaseConfig);
+} else {
+  app = getApp();
+}
+
 const auth = getAuth(app);
 const db = getFirestore(app);
 const storage = getStorage(app);

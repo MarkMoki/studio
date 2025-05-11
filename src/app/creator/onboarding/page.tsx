@@ -12,27 +12,30 @@ import { Loader2, CheckCircle, ShieldAlert } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent, useEffect } from "react";
 import { db } from '@/lib/firebase';
-import { doc, setDoc, getDoc, serverTimestamp, updateDoc } from 'firebase/firestore';
-import type { Creator } from "@/types";
+import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore'; 
+import type { Creator, User } from "@/types";
 
 const creatorCategories = ["Art", "Music", "Dance", "Comedy", "Gaming", "Education", "Tech", "Lifestyle", "Other"];
 
-export default function BecomeCreatorPage() {
+export default function CreatorOnboardingPage() {
   const { user, firebaseUser, loading: authLoading, updateUserFirestoreProfile } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
 
   const [tipHandle, setTipHandle] = useState('');
   const [category, setCategory] = useState('');
-  const [bio, setBio] = useState(user?.bio || ''); // Pre-fill if user has a bio
+  const [bio, setBio] = useState(user?.bio || ''); 
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     if (!authLoading && user?.isCreator) {
-      toast({ title: "Already a Creator", description: "Redirecting to your dashboard." });
-      router.push('/dashboard');
+      toast({ title: "Already a Creator", description: "Redirecting to your creator dashboard." });
+      router.push('/creator/dashboard');
     }
-  }, [user, authLoading, router, toast]);
+     if (!authLoading && user && user.bio && !bio) {
+      setBio(user.bio);
+    }
+  }, [user, authLoading, router, toast, bio]);
 
   if (authLoading) {
     return (
@@ -42,82 +45,85 @@ export default function BecomeCreatorPage() {
     );
   }
 
-  if (!firebaseUser) { // Use firebaseUser for auth check before profile is loaded
-    router.push('/auth');
+  if (!firebaseUser) { 
+    router.push('/auth'); // Should be caught by AppRouterRedirect
+    return null;
+  }
+   if (!user || !user.fullName || !user.phoneNumber) { // Profile must be complete first
+    toast({ title: "Profile Incomplete", description: "Please complete your main profile before becoming a creator.", variant: "destructive" });
+    router.push('/auth'); // Redirect to auth page for profile completion
     return null;
   }
 
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!firebaseUser) {
-        toast({ title: "Error", description: "You must be logged in.", variant = "destructive"});
+    if (!firebaseUser || !user) { // Ensure user is also available for its properties
+        toast({ title: "Error", description: "You must be logged in.", variant : "destructive"});
         return;
     }
     if (!tipHandle.match(/^@([a-zA-Z0-9_]+)$/)) {
-      toast({ title: "Invalid Tip Handle", description: "Handle must start with @ and contain letters, numbers, or underscores.", variant = "destructive" });
+      toast({ title: "Invalid Tip Handle", description: "Handle must start with @ and contain letters, numbers, or underscores.", variant : "destructive" });
       return;
     }
     if (!category) {
-      toast({ title: "Category Required", description: "Please select a creator category.", variant = "destructive" });
+      toast({ title: "Category Required", description: "Please select a creator category.", variant : "destructive" });
+      return;
+    }
+    if (!bio.trim()) {
+      toast({ title: "Bio Required", description: "Please provide a short bio.", variant : "destructive" });
       return;
     }
 
     setIsSubmitting(true);
     
     try {
-      // Check if tipHandle is unique
-      const creatorByHandleRef = doc(db, "creators", tipHandle.substring(1)); // Assuming tipHandle is @handle, ID is handle
-      // This isn't ideal for uniqueness check, better to query. For now, this structure might conflict if tiphandle is ID.
-      // A better approach for uniqueness: query where('tipHandle', '==', tipHandle). For now, we assume creator ID is user ID.
-      // const creatorDoc = await getDoc(creatorByHandleRef);
-      // if (creatorDoc.exists() && creatorDoc.id !== firebaseUser.uid) { // If handle exists and isn't current user's
-      //   toast({ title: "Tip Handle Taken", description: "This tip handle is already in use. Please choose another.", variant = "destructive"});
-      //   setIsSubmitting(false);
-      //   return;
-      // }
-
-
-      // 1. Update user document in 'users' collection
-      const userDocRef = doc(db, "users", firebaseUser.uid);
-      await updateUserFirestoreProfile(firebaseUser.uid, { 
+      const userUpdatePayload: Partial<User> = { 
         isCreator: true, 
         tipHandle: tipHandle, 
         category: category, 
-        bio: bio 
-      });
+        bio: bio, // Update user's main bio as well
+        updatedAt: serverTimestamp()
+      };
+      await updateUserFirestoreProfile(firebaseUser.uid, userUpdatePayload);
 
-      // 2. Create/Update creator document in 'creators' collection (ID is user UID)
       const creatorDocRef = doc(db, "creators", firebaseUser.uid);
+      const existingCreatorDoc = await getDoc(creatorDocRef);
+
       const creatorData: Partial<Creator> = {
         userId: firebaseUser.uid,
         tipHandle: tipHandle,
-        fullName: user?.fullName || firebaseUser.displayName,
-        profilePicUrl: user?.profilePicUrl || firebaseUser.photoURL,
-        coverImageUrl: '', // User can set this later
+        fullName: user.fullName, // From existing AuthUser
+        profilePicUrl: user.profilePicUrl, // From existing AuthUser
+        coverImageUrl: existingCreatorDoc.data()?.coverImageUrl || null,
         bio: bio,
         category: category,
-        totalTips: 0,
-        totalAmountReceived: 0,
+        totalTips: existingCreatorDoc.data()?.totalTips || 0,
+        totalAmountReceived: existingCreatorDoc.data()?.totalAmountReceived || 0,
         active: true,
-        featured: false, // Default to not featured
-        socialLinks: [],
-        email: user?.email || firebaseUser.email,
-        phoneNumber: user?.phoneNumber || firebaseUser.phoneNumber,
-        createdAt: serverTimestamp(),
+        featured: existingCreatorDoc.data()?.featured || false,
+        socialLinks: existingCreatorDoc.data()?.socialLinks || [],
+        email: user.email, // From existing AuthUser
+        phoneNumber: user.phoneNumber, // From existing AuthUser
         updatedAt: serverTimestamp(),
       };
-      await setDoc(creatorDocRef, creatorData, { merge: true }); // Use merge to be safe
+      if (!existingCreatorDoc.exists() || !existingCreatorDoc.data()?.createdAt) {
+        creatorData.createdAt = serverTimestamp();
+      }
+      
+      const cleanedCreatorData = Object.fromEntries(Object.entries(creatorData).filter(([_,v]) => v !== undefined)) as Partial<Creator>;
+      await setDoc(creatorDocRef, cleanedCreatorData, { merge: true });
 
       toast({
-        title: "Application Submitted!",
-        description: "Your creator profile is set up. You'll be redirected shortly.",
+        title: "You're a Creator! 🎉",
+        description: "Your creator profile is set up. Redirecting to your dashboard...",
         action: <CheckCircle className="text-green-500" />,
       });
       
-      router.push('/dashboard');
+      router.push('/creator/dashboard');
     } catch (error) {
       console.error("Error submitting creator application:", error);
-      toast({ title: "Submission Failed", description: (error as Error).message, variant = "destructive" });
+      toast({ title: "Submission Failed", description: (error as Error).message, variant : "destructive" });
     } finally {
       setIsSubmitting(false);
     }
@@ -160,7 +166,7 @@ export default function BecomeCreatorPage() {
             </div>
 
             <div>
-              <Label htmlFor="bio">Short Bio (Tell fans about you & your content)</Label>
+              <Label htmlFor="bio">Public Creator Bio (Tell fans about you & your content)</Label>
               <Textarea 
                 id="bio" 
                 placeholder="E.g., I create amazing digital art inspired by Kenyan culture..." 
@@ -171,11 +177,12 @@ export default function BecomeCreatorPage() {
                 className="mt-1"
                 maxLength={500}
               />
+               <p className="text-xs text-muted-foreground mt-1">This will be shown on your public creator profile.</p>
             </div>
             
             <Button type="submit" className="w-full bg-accent hover:bg-accent/90 text-accent-foreground py-3 text-lg" disabled={isSubmitting || authLoading}>
               {isSubmitting ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <ShieldAlert className="mr-2 h-5 w-5"/>}
-              Submit Application
+              Finalize Creator Profile
             </Button>
           </form>
         </CardContent>
