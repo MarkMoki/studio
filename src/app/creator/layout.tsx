@@ -10,6 +10,7 @@ import { Home, BarChart3, Coins, Send, Settings, Edit3, User, LogOut, HandCoins,
 import Image from 'next/image';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
+import React from 'react'; // Added React import
 
 const creatorNavItems = [
   { href: '/creator/dashboard', label: 'Dashboard', icon: <BarChart3 /> },
@@ -36,15 +37,15 @@ export default function CreatorDashboardLayout({
   }
 
   if (!user) {
-    router.replace('/auth'); // Should be caught by AppRouterRedirect, but as fallback
+    // router.replace('/auth'); // Handled by AppRouterRedirect
     return null;
   }
   if (!user.isCreator) {
-    router.replace('/dashboard'); // Supporter trying to access creator section
+    // router.replace('/dashboard'); // Handled by AppRouterRedirect
     return null;
   }
    if (!user.fullName || !user.phoneNumber) { // Profile incomplete
-    router.replace('/auth'); // Redirect to complete profile
+    // router.replace('/auth'); // Handled by AppRouterRedirect
     return null;
   }
 
@@ -86,7 +87,7 @@ export default function CreatorDashboardLayout({
         </SidebarContent>
         {/* Sidebar Footer (Optional) */}
       </Sidebar>
-      <SidebarInset className="md:ml-[var(--sidebar-width-icon)] group-data-[state=expanded]:md:ml-[var(--sidebar-width)] transition-[margin-left] ease-linear duration-200">
+      <SidebarInset className="md:ml-[var(--sidebar-width-icon)] group-data-[state=expanded]:md:ml-[var(--sidebar-width)] transition-[margin-left] ease-linear duration-200 pb-16 md:pb-0"> {/* Added pb-16 md:pb-0 for mobile nav */}
         <div className="flex flex-col min-h-screen">
           <header className="sticky top-0 z-40 flex h-14 items-center gap-4 border-b bg-background/80 backdrop-blur-sm px-4 md:hidden">
              <SidebarTrigger className="md:hidden" />
@@ -113,7 +114,7 @@ export default function CreatorDashboardLayout({
                   : "text-muted-foreground hover:bg-muted hover:text-foreground"
               )}
             >
-              {React.cloneElement(item.icon, { className: "h-5 w-5"})}
+              {React.cloneElement(item.icon as React.ReactElement, { className: "h-5 w-5"})}
               {item.label.split(' ')[0]} {/* Show first word for brevity */}
             </Link>
           ))}
