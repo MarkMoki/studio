@@ -3,15 +3,15 @@
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { MyTipsList } from "@/components/dashboard/my-tips-list";
+import { ReceivedTipsList } from "@/components/dashboard/received-tips-list"; // New import
 import { UserProfileForm } from "@/components/dashboard/user-profile-form";
 import { CreatorStats } from "@/components/dashboard/creator-stats";
-// ActivityFeed can be re-added later when its data source is Firebase
-// import { ActivityFeed } from "@/components/dashboard/activity-feed";
+import { ActivityFeed } from "@/components/dashboard/activity-feed"; // Now functional
 import { useAuth } from "@/hooks/use-auth";
 import { Button, buttonVariants } from "@/components/ui/button";
 import Link from "next/link";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2, UserCog, Gift, BarChart3, AlertTriangle, Edit3, Sparkles } from "lucide-react";
+import { Loader2, UserCog, Gift, BarChart3, AlertTriangle, Edit3, Sparkles, Newspaper, Coins } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export default function DashboardPage() {
@@ -52,7 +52,7 @@ export default function DashboardPage() {
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 animate-slide-up" style={{animationDelay: '0.1s'}}>
         <div>
           <h1 className="text-3xl md:text-4xl font-bold text-foreground">
-            Karibu, {user.fullName || user.username || "User"}! <Sparkles className="inline-block w-8 h-8 text-accent" />
+            Karibu, {user.fullName || user.username || "User"}! <Sparkles className="inline-block w-8 h-8 text-accent animate-pulse" />
           </h1>
           <p className="text-lg text-muted-foreground">Manage your TipKesho world here.</p>
         </div>
@@ -64,17 +64,17 @@ export default function DashboardPage() {
       </div>
 
       <Tabs defaultValue={defaultTab} className="w-full animate-slide-up" style={{animationDelay: '0.2s'}}>
-        <TabsList className="grid w-full md:w-auto md:inline-flex grid-cols-2 sm:grid-cols-3 md:grid-cols-none mb-6 shadow-sm">
+        <TabsList className="grid w-full md:w-auto md:inline-flex grid-cols-2 sm:grid-cols-3 lg:grid-cols-none mb-6 shadow-sm flex-wrap">
           {user.isCreator && <TabsTrigger value="creator-stats" className="text-sm md:text-base"><BarChart3 className="w-4 h-4 mr-2"/>Stats</TabsTrigger>}
+          {user.isCreator && <TabsTrigger value="received-tips" className="text-sm md:text-base"><Coins className="w-4 h-4 mr-2"/>Tips Received</TabsTrigger>}
+          <TabsTrigger value="my-tips" className="text-sm md:text-base"><Gift className="w-4 h-4 mr-2"/>My Sent Tips</TabsTrigger>
           {user.isCreator && (
-            // This now correctly links to a separate page
             <TabsTrigger value="creator-profile-nav" className="text-sm md:text-base" asChild> 
                 <Link href="/dashboard/creator-profile"><Edit3 className="w-4 h-4 mr-2"/>Edit Creator Profile</Link>
             </TabsTrigger>
           )}
-          <TabsTrigger value="my-tips" className="text-sm md:text-base"><Gift className="w-4 h-4 mr-2"/>My Tips</TabsTrigger>
+          <TabsTrigger value="activity" className="text-sm md:text-base"><Newspaper className="w-4 h-4 mr-2"/>Activity</TabsTrigger>
           <TabsTrigger value="my-profile" className="text-sm md:text-base"><UserCog className="w-4 h-4 mr-2"/>My Account</TabsTrigger>
-          {/* <TabsTrigger value="activity" className="text-sm md:text-base"><Newspaper className="w-4 h-4 mr-2"/>Activity</TabsTrigger> */}
         </TabsList>
         
         {user.isCreator && (
@@ -82,10 +82,21 @@ export default function DashboardPage() {
             <CreatorStats creatorId={user.id} />
           </TabsContent>
         )}
+
+        {user.isCreator && (
+          <TabsContent value="received-tips" className="animate-fade-in">
+            <Card className="shadow-lg">
+              <CardHeader>
+                <CardTitle className="text-2xl">Tips You&apos;ve Received</CardTitle>
+                <CardDescription>A log of all the support you&apos;ve gotten from your fans.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ReceivedTipsList creatorId={user.id} />
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
         
-        {/* Content for creator-profile-nav is not needed here as it's a Link */}
-
-
         <TabsContent value="my-tips" className="animate-fade-in">
           <Card className="shadow-lg">
             <CardHeader>
@@ -96,6 +107,10 @@ export default function DashboardPage() {
               <MyTipsList userId={user.id} />
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="activity" className="animate-fade-in">
+          <ActivityFeed />
         </TabsContent>
 
         <TabsContent value="my-profile" className="animate-fade-in">
@@ -109,10 +124,6 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
         </TabsContent>
-
-        {/* <TabsContent value="activity" className="animate-fade-in">
-          <ActivityFeed userId={user.id} />
-        </TabsContent> */}
       </Tabs>
     </div>
   );

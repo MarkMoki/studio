@@ -1,87 +1,159 @@
+
 "use client";
 
+import type { Tip, User } from '@/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Bell, Gift, UserPlus, TrendingUp } from "lucide-react";
+import { Bell, Gift, UserPlus, TrendingUp, Coins, Send, Loader2, AlertTriangle, Newspaper } from "lucide-react";
 import { formatDistanceToNow } from 'date-fns';
+import { db } from '@/lib/firebase';
+import { collection, query, where, orderBy, limit, getDocs, Timestamp } from 'firebase/firestore';
+import { useEffect, useState } from 'react';
+import Link from 'next/link';
+import { useAuth } from '@/hooks/use-auth';
 
 interface ActivityItem {
   id: string;
-  type: 'new_tip' | 'new_follower' | 'goal_achieved' | 'feature_update';
-  timestamp: string;
+  type: 'tip_received' | 'tip_sent';
+  timestamp: string | Date | Timestamp;
   title: string;
   description?: string;
   icon: React.ReactNode;
+  link?: string; 
 }
 
-// Mock data - replace with actual data fetching
-const mockActivities: ActivityItem[] = [
-  {
-    id: '1',
-    type: 'new_tip',
-    timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(), // 2 hours ago
-    title: 'You received a new tip of KES 250!',
-    description: 'From @SuperFan99 for your latest artwork.',
-    icon: <Gift className="w-5 h-5 text-green-500" />
-  },
-  {
-    id: '2',
-    type: 'new_follower',
-    timestamp: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(), // 1 day ago
-    title: '@CreativeKenya started following you.',
-    icon: <UserPlus className="w-5 h-5 text-blue-500" />
-  },
-  {
-    id: '3',
-    type: 'goal_achieved',
-    timestamp: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(), // 3 days ago
-    title: 'Congrats! You reached your monthly tipping goal!',
-    description: 'KES 50,000 target met. Amazing work!',
-    icon: <TrendingUp className="w-5 h-5 text-accent" />
-  },
-  {
-    id: '4',
-    type: 'feature_update',
-    timestamp: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(), // 5 days ago
-    title: 'New Feature: Cover Images for Profiles!',
-    description: 'You can now add a cover image to make your creator profile stand out.',
-    icon: <Bell className="w-5 h-5 text-primary" />
-  },
-];
+export function ActivityFeed() {
+  const { user, loading: authLoading } = useAuth();
+  const [activities, setActivities] = useState<ActivityItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (authLoading || !user) {
+      setLoading(false);
+      if (!authLoading && !user) setError("User not authenticated.");
+      return;
+    }
 
-export function ActivityFeed({ userId }: { userId: string }) {
-  // In a real app, filter activities based on userId and whether they are a creator
-  const activities = mockActivities;
+    const fetchActivities = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const tipsRef = collection(db, 'tips');
+        let q;
+        const fetchedActivities: ActivityItem[] = [];
 
+        if (user.isCreator) {
+          // Fetch tips received by the creator
+          q = query(tipsRef, where('toCreatorId', '==', user.id), orderBy('timestamp', 'desc'), limit(10));
+          const querySnapshot = await getDocs(q);
+          querySnapshot.forEach((doc) => {
+            const tip = doc.data() as Tip;
+            fetchedActivities.push({
+              id: doc.id,
+              type: 'tip_received',
+              timestamp: (tip.timestamp as Timestamp)?.toDate ? (tip.timestamp as Timestamp).toDate().toISOString() : tip.timestamp as string,
+              title: `You received a KES ${tip.amount.toLocaleString()} tip!`,
+              description: `From ${tip.fromUsername || 'Anonymous Supporter'}. ${tip.message ? `Message: "${tip.message}"` : ''}`,
+              icon: <Coins className="w-5 h-5 text-accent" />,
+              link: `/creators/${user.id}` // Link to their own profile or a specific tip detail page if exists
+            });
+          });
+        } else {
+          // Fetch tips sent by the supporter
+          q = query(tipsRef, where('fromUserId', '==', user.id), orderBy('timestamp', 'desc'), limit(10));
+          const querySnapshot = await getDocs(q);
+          querySnapshot.forEach((doc) => {
+            const tip = doc.data() as Tip;
+            fetchedActivities.push({
+              id: doc.id,
+              type: 'tip_sent',
+              timestamp: (tip.timestamp as Timestamp)?.toDate ? (tip.timestamp as Timestamp).toDate().toISOString() : tip.timestamp as string,
+              title: `You sent KES ${tip.amount.toLocaleString()} to ${tip.toCreatorHandle || 'a creator'}!`,
+              description: tip.message ? `Your message: "${tip.message}"` : 'Thank you for your support!',
+              icon: <Send className="w-5 h-5 text-primary" />,
+              link: `/creators/${tip.toCreatorId}`
+            });
+          });
+        }
+        setActivities(fetchedActivities);
+      } catch (err) {
+        console.error("Error fetching activities:", err);
+        setError("Failed to load activities. Please try again.");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchActivities();
+  }, [user, authLoading]);
+
+  if (loading || authLoading) {
+    return (
+      <Card className="shadow-lg">
+        <CardHeader>
+          <CardTitle className="text-2xl flex items-center gap-2"><Newspaper className="w-6 h-6 text-primary" /> Activity Feed</CardTitle>
+          <CardDescription>Loading recent events...</CardDescription>
+        </CardHeader>
+        <CardContent className="flex items-center justify-center py-10">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (error) {
+     return (
+      <Card className="shadow-lg border-destructive bg-destructive/10">
+        <CardHeader>
+          <CardTitle className="text-destructive flex items-center gap-2"><AlertTriangle className="w-6 h-6"/>Error</CardTitle>
+          <CardDescription className="text-destructive/80">Could not load activity.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <p>{error}</p>
+        </CardContent>
+      </Card>
+    );
+  }
+  
   return (
     <Card className="shadow-lg animate-fade-in">
       <CardHeader>
         <CardTitle className="text-2xl flex items-center gap-2">
-          <Bell className="w-6 h-6 text-primary" /> Activity Feed
+          <Newspaper className="w-6 h-6 text-primary" /> Activity Feed
         </CardTitle>
         <CardDescription>Stay updated with recent events and notifications.</CardDescription>
       </CardHeader>
       <CardContent>
         {activities.length === 0 ? (
-          <p className="text-center text-muted-foreground py-8">No recent activity.</p>
+          <div className="text-center py-10 animate-fade-in">
+            <Bell className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+            <p className="text-muted-foreground">No recent activity to show.</p>
+            {user && !user.isCreator && (
+                 <Button asChild variant="link" className="text-primary mt-2">
+                    <Link href="/creators">Discover creators to support</Link>
+                </Button>
+            )}
+          </div>
         ) : (
           <div className="space-y-6">
             {activities.map((activity, index) => (
               <div 
                 key={activity.id} 
-                className="flex items-start gap-4 p-4 border-b last:border-b-0 animate-slide-up"
+                className="flex items-start gap-4 p-4 border-b last:border-b-0 animate-slide-up hover:bg-secondary/30 rounded-md transition-colors"
                 style={{ animationDelay: `${index * 0.1}s` }}
               >
-                <div className="p-2 bg-secondary/50 rounded-full mt-1">
+                <div className="p-3 bg-muted rounded-full mt-1 shadow-sm">
                   {activity.icon}
                 </div>
                 <div className="flex-grow">
-                  <p className="font-semibold">{activity.title}</p>
-                  {activity.description && (
-                    <p className="text-sm text-muted-foreground">{activity.description}</p>
-                  )}
-                  <p className="text-xs text-muted-foreground/70 mt-1">
-                    {formatDistanceToNow(new Date(activity.timestamp), { addSuffix: true })}
+                  <Link href={activity.link || "#"} className="group">
+                    <p className="font-semibold group-hover:text-primary transition-colors">{activity.title}</p>
+                    {activity.description && (
+                      <p className="text-sm text-muted-foreground group-hover:text-foreground transition-colors">{activity.description}</p>
+                    )}
+                  </Link>
+                  <p className="text-xs text-muted-foreground/80 mt-1">
+                    {formatDistanceToNow(new Date(activity.timestamp as string), { addSuffix: true })}
                   </p>
                 </div>
               </div>

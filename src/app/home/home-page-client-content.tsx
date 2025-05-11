@@ -4,12 +4,13 @@
 import { motion } from 'framer-motion';
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ArrowRight, Gift, Zap, MessageSquareHeart, Users, Sparkles, Search, HeartHandshake, TrendingUp, Palette } from "lucide-react";
+import { ArrowRight, Gift, Zap, MessageSquareHeart, Users, Sparkles, Palette, TrendingUp } from "lucide-react"; // Removed Search, HeartHandshake
 import Image from "next/image";
 import Link from "next/link";
 import { HowItWorks } from "@/components/home/how-it-works"; 
 import { Testimonials } from "@/components/home/testimonials"; 
 import { FeaturedCreatorsClient } from "./featured-creators-client";
+import { PlatformHighlights } from "@/components/home/platform-highlights"; // New import
 import type { Creator } from '@/types';
 import { cn } from "@/lib/utils";
 
@@ -41,16 +42,26 @@ export function HomePageClientContent({ featuredCreatorsData }: HomePageClientCo
     },
   ];
 
+  const sectionVariants = {
+    hidden: { opacity: 0, y: 50 },
+    visible: { opacity: 1, y: 0, transition: { duration: 0.7, ease: "easeOut" } }
+  };
+
   return (
     <div className="flex flex-col items-center space-y-16 md:space-y-24 overflow-x-hidden">
       {/* Hero Section */}
-      <section className="w-full py-12 md:py-24 lg:py-32 bg-secondary/30 rounded-xl shadow-2xl overflow-hidden">
+      <motion.section 
+        className="w-full py-12 md:py-24 lg:py-32 bg-secondary/30 rounded-xl shadow-2xl overflow-hidden"
+        initial="hidden"
+        animate="visible"
+        variants={sectionVariants}
+      >
         <div className="container px-4 md:px-6">
           <div className="grid gap-6 lg:grid-cols-[1fr_400px] lg:gap-12 xl:grid-cols-[1fr_600px]">
             <motion.div 
               initial={{ opacity: 0, x: -50 }}
               animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.7, ease: "easeOut" }}
+              transition={{ duration: 0.7, ease: "easeOut", delay: 0.2 }}
               className="flex flex-col justify-center space-y-6"
             >
               <div className="space-y-3">
@@ -65,30 +76,34 @@ export function HomePageClientContent({ featuredCreatorsData }: HomePageClientCo
                 </p>
               </div>
               <div className="flex flex-col gap-3 min-[400px]:flex-row">
-                <Link 
-                  href="/creators" 
-                  className={cn(
-                    buttonVariants({ size: "lg" }),
-                    "bg-primary hover:bg-primary/90 text-primary-foreground shadow-md hover:shadow-lg transform hover:scale-105 transition-all duration-300"
-                  )}
-                >
-                  Discover Creators <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
-                </Link>
-                <Link 
-                  href="/auth" 
-                  className={cn(
-                    buttonVariants({ size: "lg", variant: "outline" }),
-                    "shadow-md hover:shadow-lg transform hover:scale-105 transition-all duration-300"
-                  )}
-                >
-                  Sign Up & Shine
-                </Link>
+                <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                  <Link 
+                    href="/creators" 
+                    className={cn(
+                      buttonVariants({ size: "lg" }),
+                      "bg-primary hover:bg-primary/90 text-primary-foreground shadow-md hover:shadow-lg transition-all duration-300"
+                    )}
+                  >
+                    Discover Creators <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
+                  </Link>
+                </motion.div>
+                <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                  <Link 
+                    href="/auth" 
+                    className={cn(
+                      buttonVariants({ size: "lg", variant: "outline" }),
+                      "shadow-md hover:shadow-lg transition-all duration-300"
+                    )}
+                  >
+                    Sign Up & Shine
+                  </Link>
+                </motion.div>
               </div>
             </motion.div>
             <motion.div
-              initial={{ opacity: 0, x: 50 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.7, ease: "easeOut", delay: 0.2 }}
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.7, ease: "easeOut", delay: 0.4 }}
             >
             <Image
               src="https://picsum.photos/seed/kenya-vibes/600/400"
@@ -102,10 +117,16 @@ export function HomePageClientContent({ featuredCreatorsData }: HomePageClientCo
             </motion.div>
           </div>
         </div>
-      </section>
+      </motion.section>
 
       {/* Features Section */}
-      <section className="w-full py-12 md:py-16">
+       <motion.section 
+        className="w-full py-12 md:py-16"
+        initial="hidden"
+        whileInView="visible"
+        viewport={{ once: true, amount: 0.2 }}
+        variants={sectionVariants}
+      >
         <div className="container px-4 md:px-6">
           <motion.div 
             initial={{ opacity: 0, y:20 }}
@@ -126,12 +147,11 @@ export function HomePageClientContent({ featuredCreatorsData }: HomePageClientCo
                 initial={{ opacity: 0, y: 20 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true, amount: 0.2 }}
-                transition={{ duration: 0.5, delay: index * 0.1 }}
-                whileHover={{ y: -5, scale: 1.03, boxShadow: "0 10px 15px -3px rgba(var(--primary-rgb), 0.2), 0 4px 6px -2px rgba(var(--primary-rgb), 0.1)" }}
-
+                transition={{ duration: 0.5, delay: index * 0.15 }}
+                whileHover={{ y: -5, scale: 1.03, boxShadow: "0 10px 15px -3px hsl(var(--primary-hsl) / 0.1), 0 4px 6px -2px hsl(var(--primary-hsl) / 0.05)" }}
               >
               <Card 
-                className="shadow-lg hover:shadow-2xl transition-all duration-300 ease-in-out h-full"
+                className="shadow-lg hover:shadow-2xl transition-all duration-300 ease-in-out h-full bg-card"
               >
                 <CardHeader className="flex flex-row items-center gap-4 pb-2 p-6">
                   {feature.icon}
@@ -145,14 +165,21 @@ export function HomePageClientContent({ featuredCreatorsData }: HomePageClientCo
             ))}
           </div>
         </div>
-      </section>
+      </motion.section>
 
-      <HowItWorks />
+      <HowItWorks /> 
+
+      <PlatformHighlights />
 
       <FeaturedCreatorsClient creators={featuredCreatorsData} />
       
-      {/* New Section: Spotlight on Categories */}
-      <section className="w-full py-12 md:py-16 bg-secondary/20 rounded-xl shadow-inner">
+      <motion.section 
+        className="w-full py-12 md:py-16 bg-secondary/20 rounded-xl shadow-inner"
+        initial="hidden"
+        whileInView="visible"
+        viewport={{ once: true, amount: 0.2 }}
+        variants={sectionVariants}
+      >
         <div className="container px-4 md:px-6">
           <motion.div 
             initial={{ opacity: 0, y:20 }}
@@ -178,7 +205,7 @@ export function HomePageClientContent({ featuredCreatorsData }: HomePageClientCo
                 initial={{ opacity: 0, scale: 0.8 }}
                 whileInView={{ opacity: 1, scale: 1 }}
                 viewport={{ once: true, amount: 0.2 }}
-                transition={{ duration: 0.4, delay: index * 0.1 }}
+                transition={{ duration: 0.4, delay: index * 0.15 }}
                 whileHover={{ scale: 1.05, transition: { duration: 0.2 } }}
               >
               <Link href={category.link} legacyBehavior>
@@ -193,20 +220,20 @@ export function HomePageClientContent({ featuredCreatorsData }: HomePageClientCo
             ))}
           </div>
         </div>
-      </section>
+      </motion.section>
 
       <Testimonials />
 
       <motion.section 
-        initial={{ opacity: 0 }}
-        whileInView={{ opacity: 1 }}
+        initial="hidden"
+        whileInView="visible"
         viewport={{ once: true, amount: 0.2 }}
-        transition={{ duration: 0.7 }}
+        variants={sectionVariants}
         className="w-full py-12 md:py-20 bg-gradient-to-br from-primary via-green-600 to-accent text-primary-foreground rounded-xl shadow-2xl"
       >
         <div className="container grid items-center justify-center gap-6 px-4 text-center md:px-6">
           <div className="space-y-4">
-            <Sparkles className="w-12 h-12 mx-auto text-background/80 animate-ping" />
+            <Sparkles className="w-12 h-12 mx-auto text-background/80 animate-bounce" />
             <h2 className="text-4xl font-bold tracking-tighter md:text-5xl/tight">
               Ready to Make a Difference?
             </h2>
@@ -215,24 +242,28 @@ export function HomePageClientContent({ featuredCreatorsData }: HomePageClientCo
             </p>
           </div>
           <div className="mx-auto w-full max-w-sm space-x-3 flex justify-center">
+            <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
              <Link 
                 href="/creators" 
                 className={cn(
                   buttonVariants({ size: "lg", variant: "secondary" }),
-                  "bg-background text-primary hover:bg-background/90 shadow-md hover:shadow-lg transform hover:scale-105 transition-all duration-300"
+                  "bg-background text-primary hover:bg-background/90 shadow-md hover:shadow-lg transition-all duration-300"
                 )}
              >
                 Explore Creators
               </Link>
+            </motion.div>
+            <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
               <Link 
                 href="/auth" 
                 className={cn(
                     buttonVariants({ size: "lg", variant: "outline" }),
-                    "border-primary-foreground text-primary-foreground hover:bg-primary-foreground hover:text-primary shadow-md hover:shadow-lg transform hover:scale-105 transition-all duration-300"
+                    "border-primary-foreground text-primary-foreground hover:bg-primary-foreground hover:text-primary shadow-md hover:shadow-lg transition-all duration-300"
                 )}
               >
                   Join as a Creator
               </Link>
+            </motion.div>
           </div>
         </div>
       </motion.section>
