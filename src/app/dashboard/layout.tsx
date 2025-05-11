@@ -6,6 +6,8 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth';
 import { Sidebar, SidebarProvider, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarContent, SidebarHeader, SidebarTrigger, SidebarInset } from '@/components/ui/sidebar';
 import { Home, Users, Gift, Settings, HandCoins, Sparkles, Loader2, ShieldAlert } from 'lucide-react';
+import React from 'react';
+import { cn } from "@/lib/utils";
 
 const supporterNavItems = [
   { href: '/dashboard', label: 'Home', icon: <Home /> },
@@ -32,15 +34,18 @@ export default function SupporterDashboardLayout({
   }
   
   if (!user) {
-    router.replace('/auth'); // Should be caught by AppRouterRedirect
+    // This should be handled by AppRouterRedirect, but added as a fallback.
+    // router.replace('/auth'); 
     return null;
   }
   if (user.isCreator) {
-    router.replace('/creator/dashboard'); // Creator trying to access supporter section
+     // This should be handled by AppRouterRedirect, but added as a fallback.
+    // router.replace('/creator/dashboard'); 
     return null;
   }
-  if (!user.fullName || !user.phoneNumber) { // Profile incomplete
-    router.replace('/auth'); // Redirect to complete profile
+   if (!user.fullName || !user.phoneNumber) { // Profile incomplete
+     // This should be handled by AppRouterRedirect, but added as a fallback.
+    // router.replace('/auth'); 
     return null;
   }
 
@@ -101,7 +106,7 @@ export default function SupporterDashboardLayout({
                 pathname.startsWith('/creators') && item.href === '/creators' ? "text-primary bg-primary/10" : ""
               )}
             >
-              {React.cloneElement(item.icon, { className: "h-5 w-5"})}
+              {React.cloneElement(item.icon as React.ReactElement, { className: "h-5 w-5"})}
               {item.label.split(' ')[0]} {/* Show first word for brevity */}
             </Link>
           ))}
