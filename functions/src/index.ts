@@ -14,6 +14,9 @@ admin.initializeApp();
 const db = admin.firestore();
 
 const FLUTTERWAVE_API_URL = "https://api.flutterwave.com/v3/payments";
+const FLUTTERWAVE_API_TIMEOUT_MS = 30000; // 30 seconds
+const MAX_FLUTTERWAVE_RETRIES = 3;
+const RETRY_DELAY_MS = 2000; // 2 seconds
 
 
 interface SendTipData {
@@ -25,7 +28,8 @@ interface SendTipData {
   tipperName?: string | null;
 }
 
-export const sendTipViaMpesa = functions.runWith({ secrets: ["FLUTTERWAVE_SECRET_KEY"] })
+export const sendTipViaMpesa = functions
+  .runWith({ timeoutSeconds: 300, secrets: ["FLUTTERWAVE_SECRET_KEY"] })
   .https.onCall(async (data: SendTipData, context) => {
   // Log the invocation with details that can help debug, including origin
   const invocationTime = Date.now();
@@ -136,7 +140,7 @@ export const sendTipViaMpesa = functions.runWith({ secrets: ["FLUTTERWAVE_SECRET
       tx_ref: txRef,
       amount: tipAmount.toString(),
       currency: "KES",
-      redirect_url: "https://tipkesho.com/payment-callback/flutterwave",
+      redirect_url: "https://tipkesho.com/payment-callback/flutterwave", // Replace with actual success URL
       payment_options: "mpesa",
       customer: {
         email: tipperEmail || context.auth.token?.email || `supporter_${fromUserId.substring(0,5)}@tipkesho.com`,
@@ -146,7 +150,7 @@ export const sendTipViaMpesa = functions.runWith({ secrets: ["FLUTTERWAVE_SECRET
       customizations: {
         title: `Tip to ${toCreatorHandle} on TipKesho`,
         description: `Supporting creative talent. Tip Amount: KES ${tipAmount}`,
-        logo: "https://tipkesho.com/logo.png",
+        logo: "https://tipkesho.com/logo.png", // Replace with actual logo URL
       },
       meta: {
         tip_id: tipDocRef.id,
@@ -155,74 +159,103 @@ export const sendTipViaMpesa = functions.runWith({ secrets: ["FLUTTERWAVE_SECRET
       },
     };
     functions.logger.info("Prepared Flutterwave payload.", { txRef, payload: flutterwavePayload });
+    
+    let attempt = 0;
+    let flutterwaveResponseData;
+    let lastError: any;
 
-    try {
-      const response = await axios.post(FLUTTERWAVE_API_URL, flutterwavePayload, {
-        headers: {
-          Authorization: `Bearer ${flutterwaveSecretKey}`,
-          "Content-Type": "application/json",
-        },
-      });
-      functions.logger.info(`Flutterwave API response status: ${response.status}`, { txRef, responseStatus: response.status, responseData: response.data });
-
-
-      if (response.data && response.data.status === "success") {
-        functions.logger.info("Flutterwave payment initiation successful.", { txRef, responseData: response.data });
-        await tipDocRef.update({
-          flutterwaveResponse: response.data,
-        });
-        return {
-          success: true,
-          message: "STK Push initiated. Please complete the payment on your phone.",
-          data: response.data,
-        };
-      } else {
-        functions.logger.error("Flutterwave payment initiation failed by API.", { txRef, responseData: response.data });
-        await tipDocRef.update({
-          paymentStatus: "failed_initiation" as const,
-          flutterwaveResponse: response.data || { error: "No data in response" },
-        });
-        throw new functions.https.HttpsError("aborted",
-          response.data?.message || `Payment initiation failed with provider. Ref: FW_API_FAIL_${errorRefBase}`
-        );
-      }
-    } catch (error: any) {
-      // Log extended error information
-      functions.logger.error("Error during Flutterwave API call or updating tip document:", {
-        txRef,
-        errorName: error.name,
-        errorMessage: error.message,
-        errorStack: error.stack,
-        axiosErrorDetails: axios.isAxiosError(error) ? {
-          status: error.response?.status,
-          data: error.response?.data,
-          headers: error.response?.headers,
-          config: error.config,
-        } : "Not an Axios error",
-        fullErrorObject: JSON.stringify(error, Object.getOwnPropertyNames(error)), // Attempt to serialize the whole error
-        errorRef: `FW_CATCH_${errorRefBase}`
-      });
-
+    while (attempt < MAX_FLUTTERWAVE_RETRIES) {
+      attempt++;
+      functions.logger.info(`Attempt ${attempt} to call Flutterwave API.`, { txRef });
       try {
-        await tipDocRef.update({
-          paymentStatus: "error_initiation" as const,
-          flutterwaveError: axios.isAxiosError(error) ?
-            (error.response?.data || { message: error.message, code: error.code }) :
-            { message: error.message, name: error.name, code: error.code, stack: error.stack } || "Unknown error during API call",
+        const response = await axios.post(FLUTTERWAVE_API_URL, flutterwavePayload, {
+          headers: {
+            Authorization: `Bearer ${flutterwaveSecretKey}`,
+            "Content-Type": "application/json",
+          },
+          timeout: FLUTTERWAVE_API_TIMEOUT_MS,
         });
-      } catch (updateError: any) {
-        functions.logger.error("CRITICAL: Failed to update tip document after Flutterwave error", { tipId: tipDocRef.id, updateError, updateErrorMessage: updateError.message, errorRef: `FW_UPDATE_FAIL_${errorRefBase}` });
-      }
+        functions.logger.info(`Flutterwave API attempt ${attempt} response status: ${response.status}`, { txRef, responseStatus: response.status, responseData: response.data });
+        flutterwaveResponseData = response.data;
 
-      const clientErrorMessage = axios.isAxiosError(error) ? (error.response?.data?.message || error.message) : (error.message || "Unknown error");
+        if (response.data && response.data.status === "success") {
+          functions.logger.info("Flutterwave payment initiation successful.", { txRef, responseData: response.data });
+          await tipDocRef.update({
+            flutterwaveResponse: response.data,
+          });
+          return {
+            success: true,
+            message: "STK Push initiated. Please complete the payment on your phone.",
+            data: response.data,
+          };
+        } else {
+          functions.logger.warn(`Flutterwave payment initiation attempt ${attempt} failed by API.`, { txRef, responseData: response.data });
+          lastError = new Error(response.data?.message || `Payment initiation failed with provider on attempt ${attempt}.`);
+          // Check if this is a retryable error or a final failure from Flutterwave.
+          // For now, we retry on any non-success API response.
+          if (attempt < MAX_FLUTTERWAVE_RETRIES) {
+            functions.logger.info(`Will retry after ${RETRY_DELAY_MS}ms.`, { txRef });
+            await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS));
+            continue;
+          } else {
+             await tipDocRef.update({
+              paymentStatus: "failed_initiation" as const,
+              flutterwaveResponse: response.data || { error: "No data in response after retries" },
+              lastError: lastError.message,
+            });
+            throw new functions.https.HttpsError("aborted",
+              lastError.message || `Payment initiation failed after ${MAX_FLUTTERWAVE_RETRIES} attempts. Ref: FW_API_RETRY_FAIL_${errorRefBase}`
+            );
+          }
+        }
+      } catch (error: any) {
+        lastError = error;
+        functions.logger.error(`Error during Flutterwave API call attempt ${attempt}:`, {
+          txRef,
+          errorName: error.name,
+          errorMessage: error.message,
+          errorStack: error.stack,
+          isAxiosError: axios.isAxiosError(error),
+          axiosErrorDetails: axios.isAxiosError(error) ? {
+            status: error.response?.status,
+            data: error.response?.data,
+            isTimeout: error.code === 'ECONNABORTED',
+          } : "Not an Axios error",
+          errorRef: `FW_CATCH_ATTEMPT_${attempt}_${errorRefBase}`
+        });
 
-      if (axios.isAxiosError(error) && error.response) {
-        throw new functions.https.HttpsError("internal",
-          `Payment provider error: ${clientErrorMessage}. Ref: FW_AXIOS_ERR_${error.response.status || 'NO_STATUS'}_${errorRefBase}`
-        );
+        // Retry on network errors or timeouts
+        if (axios.isAxiosError(error) && (error.code === 'ECONNABORTED' || !error.response) && attempt < MAX_FLUTTERWAVE_RETRIES) {
+          functions.logger.info(`Network error or timeout on attempt ${attempt}. Will retry after ${RETRY_DELAY_MS}ms.`, { txRef });
+          await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS));
+          continue;
+        }
+        // For other errors, or if max retries reached, break and handle below
+        break;
       }
-      throw new functions.https.HttpsError("internal", `An error occurred while processing the payment. ${clientErrorMessage}. Ref: FW_GEN_ERR_${errorRefBase}`);
+    } // End of while loop
+
+    // If loop finished due to max retries or unretryable error
+    functions.logger.error("Flutterwave API call failed after all retries or due to unretryable error.", { txRef, lastError });
+    try {
+      await tipDocRef.update({
+        paymentStatus: "error_initiation" as const,
+        flutterwaveError: axios.isAxiosError(lastError) ?
+          (lastError.response?.data || { message: lastError.message, code: lastError.code, isTimeout: lastError.code === 'ECONNABORTED' }) :
+          { message: lastError?.message, name: lastError?.name, code: lastError?.code, stack: lastError?.stack } || "Unknown error during API call",
+      });
+    } catch (updateError: any) {
+      functions.logger.error("CRITICAL: Failed to update tip document after Flutterwave final error", { tipId: tipDocRef.id, updateError, updateErrorMessage: updateError.message, errorRef: `FW_FINAL_UPDATE_FAIL_${errorRefBase}` });
     }
+
+    const clientErrorMessage = axios.isAxiosError(lastError) ? (lastError.response?.data?.message || lastError.message) : (lastError?.message || "Unknown error");
+    if (axios.isAxiosError(lastError) && lastError.response) {
+      throw new functions.https.HttpsError("internal",
+        `Payment provider error: ${clientErrorMessage}. Ref: FW_AXIOS_FINAL_ERR_${lastError.response.status || 'NO_STATUS'}_${errorRefBase}`
+      );
+    }
+    throw new functions.https.HttpsError("internal", `An error occurred while processing the payment. ${clientErrorMessage}. Ref: FW_GEN_FINAL_ERR_${errorRefBase}`);
+
   } catch (error: any) {
     let detailedClientErrorMessage = "An unexpected error occurred. Please try again.";
     if (error.message) {
