@@ -35,23 +35,18 @@ async function getCreator(id: string): Promise<Creator | null> {
     const creatorDocSnap = await getDoc(creatorDocRef);
 
     if (creatorDocSnap.exists()) {
-      // Also fetch associated user data if needed (email, phone from users collection)
-      const creatorData = creatorDocSnap.data() as Omit<Creator, 'id'>;
-      let email, phoneNumber;
-      if (creatorData.userId) {
-        const userDocRef = doc(db, 'users', creatorData.userId);
-        const userDocSnap = await getDoc(userDocRef);
-        if (userDocSnap.exists()) {
-          email = userDocSnap.data()?.email;
-          phoneNumber = userDocSnap.data()?.phoneNumber;
-        }
-      }
-      return { id: creatorDocSnap.id, ...creatorData, email, phoneNumber };
+      // The creator document should already contain the necessary email and phoneNumber fields
+      // as per the Creator type and data population logic in onboarding/profile updates.
+      // These fields are denormalized into the 'creators' collection.
+      const creatorDataWithId = { id: creatorDocSnap.id, ...creatorDocSnap.data() } as Creator;
+      return creatorDataWithId;
     }
     return null;
   } catch (error) {
     console.error("Error fetching creator:", error);
-    return null; // Or throw error to be caught by Next.js error boundary
+    // Firestore permission errors or other issues will be caught here.
+    // The page will then display a "Creator Not Found" message.
+    return null;
   }
 }
 
@@ -63,7 +58,7 @@ export default async function CreatorProfilePage({ params }: { params: { creator
       <div className="text-center py-20 animate-fade-in">
         <AlertTriangle className="w-16 h-16 text-destructive mx-auto mb-6" />
         <h1 className="text-3xl font-semibold mb-3">Creator Not Found</h1>
-        <p className="text-muted-foreground mb-6">The creator profile you are looking for does not exist or could not be loaded.</p>
+        <p className="text-muted-foreground mb-6">The creator profile you are looking for does not exist or could not be loaded. This might be due to a permission issue or an invalid ID.</p>
         <Button asChild variant="outline">
           <Link href="/creators">Back to Creators</Link>
         </Button>
@@ -125,6 +120,7 @@ export default async function CreatorProfilePage({ params }: { params: { creator
             </div>
           )}
 
+          {/* Contact info now directly from creator object */}
           { (creator.email || creator.phoneNumber) && (
             <div className="pt-6 border-t">
               <h3 className="text-xl font-semibold mb-3 text-center md:text-left">Contact Information</h3>
@@ -162,20 +158,3 @@ function InfoBox({ title, value, icon }: { title: string; value: string | number
     </div>
   );
 }
-
-// generateStaticParams can be used if you want to pre-render some popular creator pages
-// For dynamic fetching of many creators, this might not be suitable for all.
-// Example: Fetch top N creators to pre-render
-// export async function generateStaticParams() {
-//   // const creatorsCol = collection(db, 'creators');
-//   // const q = query(creatorsCol, where('active', '==', true), orderBy('totalAmountReceived', 'desc'), limit(5));
-//   // const snapshot = await getDocs(q);
-//   // return snapshot.docs.map(doc => ({
-//   //   creatorId: doc.id,
-//   // }));
-//   return []; // For now, let it be dynamic
-// }
-
-// Ensure this page is a server component (default in App Router)
-// or uses appropriate data fetching for its Next.js version.
-// For client-side interactions like the TippingModal, those are separate components.
