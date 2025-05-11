@@ -232,8 +232,8 @@ export function CreatorStats({ creatorId }: CreatorStatsProps) {
       <Card className="animate-slide-up" style={{animationDelay: '0.5s'}}>
         <CardHeader>
           <CardTitle>Withdraw Funds</CardTitle>
-          <CardDescription>Transfer your earnings to your M-Pesa account.</CardHeader>
-        </CardContent>
+          <CardDescription>Transfer your earnings to your M-Pesa account.</CardDescription>
+        </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-lg font-semibold">Available Balance: <span className="text-primary">KES {totalEarnings.toLocaleString()}</span></p>
           <Button className="w-full md:w-auto bg-accent hover:bg-accent/90 text-accent-foreground" disabled>
@@ -259,3 +259,4 @@ function StatCard({ title, value, icon, delay }: { title: string; value: string;
     </Card>
   );
 }
+
