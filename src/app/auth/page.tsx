@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, type FormEvent, useEffect, useRef } from "react";
@@ -14,12 +13,12 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { useToast } from "@/hooks/use-toast";
 import type { RecaptchaVerifier, ConfirmationResult } from "firebase/auth";
-import { storage, db } from "@/lib/firebase"; // Added db
+import { storage, db } from "@/lib/firebase";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import type { User } from "@/types";
 import { Textarea } from "@/components/ui/textarea";
 import Link from 'next/link';
-import { doc, getDoc } from "firebase/firestore"; // Added for checking user doc
+import { doc, getDoc } from "firebase/firestore";
 
 type UserRole = "creator" | "supporter";
 type Slide = "roleSelection" | "authMethodSelection" | "phoneInput" | "otpVerification" | "emailAuth" | "completeProfile";
@@ -49,7 +48,7 @@ export default function AuthPage() {
   const [direction, setDirection] = useState(1);
   const [authMethod, setAuthMethod] = useState<AuthMethod>(null);
   
-  const [phoneNumber, setPhoneNumber] = useState("");
+  const [phoneNumber, setPhoneNumber] = useState(""); // For OTP
   const [otp, setOtp] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -58,11 +57,12 @@ export default function AuthPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
+  // Profile completion form states
   const [username, setUsername] = useState("");
   const [fullName, setFullName] = useState("");
+  const [formPhoneNumber, setFormPhoneNumber] = useState(""); // For profile completion form
   const [profilePicFile, setProfilePicFile] = useState<File | null>(null);
   const [profilePicPreview, setProfilePicPreview] = useState<string | null>(null);
-  // isCreator is now derived from userRole for the form
   const [tipHandle, setTipHandle] = useState('');
   const [category, setCategory] = useState('');
   const [bio, setBio] = useState('');
@@ -92,31 +92,62 @@ export default function AuthPage() {
     if (!authLoading && user && user.fullName) { 
       router.push("/dashboard");
     } else if (!authLoading && firebaseUser && !user?.fullName && currentSlide !== 'completeProfile') {
-      // If user is authenticated but profile is incomplete, navigate to completeProfile.
-      // This check relies on 'fullName' as an indicator of a completed profile.
-      // We need to ensure 'userRole' is available, perhaps from localStorage or query param if necessary,
-      // or fetch user doc here to determine role if already set.
-      // For now, assume if firebaseUser exists and profile is incomplete, role was previously set or will be prompted.
-      if (!userRole && currentSlide !== 'roleSelection') {
-        // If role is unknown and firebaseUser exists, but profile incomplete,
-        // It means they likely authenticated but then refreshed or navigated away.
-        // Try to fetch their existing role or default to prompting.
-        const fetchUserRole = async () => {
+      const fetchUserRoleAndTransition = async () => {
+        let resolvedUserRole = userRole;
+        if (!resolvedUserRole) {
             const userDocRef = doc(db, "users", firebaseUser.uid);
             const userDocSnap = await getDoc(userDocRef);
             if(userDocSnap.exists() && userDocSnap.data()?.isCreator !== undefined) {
-                setUserRole(userDocSnap.data()?.isCreator ? 'creator' : 'supporter');
+                resolvedUserRole = userDocSnap.data()?.isCreator ? 'creator' : 'supporter';
+                setUserRole(resolvedUserRole); 
             }
-            handleNextSlide("completeProfile");
         }
-        fetchUserRole();
+        
+        if(resolvedUserRole) {
+            // Pre-fill form fields for completeProfile slide
+            if (firebaseUser.displayName && fullName === "") setFullName(firebaseUser.displayName);
+            if (firebaseUser.photoURL && profilePicPreview === null) setProfilePicPreview(firebaseUser.photoURL);
+            if (firebaseUser.phoneNumber && formPhoneNumber === "") setFormPhoneNumber(firebaseUser.phoneNumber);
+            // User's bio might already be in the 'user' object from useAuth if fetched, otherwise fetch from userDoc
+            const userDocRef = doc(db, "users", firebaseUser.uid);
+            const userDocSnap = await getDoc(userDocRef);
+            if (userDocSnap.exists() && userDocSnap.data()?.bio && bio === "") {
+                setBio(userDocSnap.data()?.bio);
+            }
 
-      } else if (userRole) { // if role is known
-         handleNextSlide("completeProfile");
-      }
-      // If no userRole and no firebaseUser, they stay on current flow (e.g. roleSelection)
+            handleNextSlide("completeProfile");
+        } else {
+            // If role is still unknown, might need to go back to role selection or handle error
+            // For now, assume they should go to roleSelection if profile is incomplete and role unknown
+             if (currentSlide !== 'roleSelection') {
+                setCurrentSlide("roleSelection"); // Or a specific "choose role then complete profile" state
+             }
+        }
+      };
+      fetchUserRoleAndTransition();
     }
-  }, [user, firebaseUser, authLoading, router, currentSlide, userRole]);
+  }, [user, firebaseUser, authLoading, router, currentSlide, userRole, fullName, profilePicPreview, formPhoneNumber, bio]);
+
+
+  useEffect(() => {
+    // Pre-fill form fields when transitioning to 'completeProfile' if firebaseUser details are available
+    // and the corresponding form fields are empty.
+    if (currentSlide === 'completeProfile' && firebaseUser) {
+      if (firebaseUser.displayName && fullName === "") {
+        setFullName(firebaseUser.displayName);
+      }
+      if (firebaseUser.photoURL && profilePicPreview === null) {
+        setProfilePicPreview(firebaseUser.photoURL);
+      }
+      if (firebaseUser.phoneNumber && formPhoneNumber === "") {
+        setFormPhoneNumber(firebaseUser.phoneNumber);
+      }
+      // Bio might be pre-filled from existing user data if they partially completed then returned
+      if (user?.bio && bio === "") {
+        setBio(user.bio);
+      }
+    }
+  }, [currentSlide, firebaseUser, user, fullName, profilePicPreview, formPhoneNumber, bio]);
 
 
   const initializeRecaptcha = async () => {
@@ -164,13 +195,12 @@ export default function AuthPage() {
   const handleGoogleAuth = async () => {
     if (!userRole) {
       toast({ title: "Role Selection Required", description: "Please select if you are a creator or supporter first.", variant: "destructive" });
-      handlePrevSlide("roleSelection"); // Go back to role selection
+      handlePrevSlide("roleSelection"); 
       return;
     }
     setIsLoading(true);
     try {
       await signInWithGoogle(userRole);
-      // onAuthStateChanged will handle navigation or next steps
     } catch (error) {
       toast({ title: "Google Sign-In Failed", description: (error as Error).message, variant: "destructive" });
     } finally {
@@ -196,7 +226,6 @@ export default function AuthPage() {
       } else {
         await signInWithEmailPassword(email, password);
       }
-      // onAuthStateChanged handles navigation/next steps
     } catch (error: any) {
       let friendlyMessage = "Authentication failed. Please try again.";
       if (error.code === 'auth/email-already-in-use') {
@@ -232,6 +261,7 @@ export default function AuthPage() {
     try {
       const result = await signInWithPhone(phoneNumber, recaptchaVerifier, userRole);
       setConfirmationResult(result);
+      setFormPhoneNumber(phoneNumber); // Pre-fill form phone number with OTP phone
       toast({ title: "OTP Sent", description: "Please check your messages." });
       handleNextSlide("otpVerification");
     } catch (error) {
@@ -248,13 +278,12 @@ export default function AuthPage() {
     if (!confirmationResult) {
       toast({ title: "Verification Error", variant: "destructive" }); return;
     }
-    if (!userRole) { // Should not happen if flow is correct
+    if (!userRole) { 
         toast({ title: "Role Selection Missing", variant: "destructive" }); return;
     }
     setIsLoading(true);
     try {
       await confirmOtp(confirmationResult, otp, userRole);
-      // onAuthStateChanged handles next steps
     } catch (error) {
       toast({ title: "OTP Verification Failed", description: (error as Error).message, variant: "destructive" });
     } finally {
@@ -274,6 +303,10 @@ export default function AuthPage() {
     e.preventDefault();
     if (!firebaseUser || !userRole) {
         toast({ title: "Error", description: "Authentication or role information missing.", variant: "destructive" });
+        return;
+    }
+    if (!formPhoneNumber.match(/^\+254[17]\d{8}$/)) {
+        toast({ title: "Invalid Phone Number", description: "Format: +2547XXXXXXXX or +2541XXXXXXXX.", variant: "destructive" });
         return;
     }
     const isCreatorProfile = userRole === 'creator';
@@ -297,6 +330,7 @@ export default function AuthPage() {
     const profileData: Partial<User> = {
         username,
         fullName,
+        phoneNumber: formPhoneNumber,
         profilePicUrl,
         isCreator: isCreatorProfile,
         bio,
@@ -376,20 +410,20 @@ export default function AuthPage() {
               <CardContent>
                 <form onSubmit={handleEmailAuth} className="space-y-6">
                   <div className="space-y-2">
-                    <Label htmlFor="email">Email</Label>
-                    <Input id="email" type="email" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} required className="text-lg p-4"/>
+                    <Label htmlFor="email-auth-email">Email</Label>
+                    <Input id="email-auth-email" type="email" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} required className="text-lg p-4"/>
                   </div>
                   <div className="space-y-2 relative">
-                    <Label htmlFor="password">Password</Label>
-                    <Input id="password" type={showPassword ? "text" : "password"} placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} required className="text-lg p-4"/>
+                    <Label htmlFor="email-auth-password">Password</Label>
+                    <Input id="email-auth-password" type={showPassword ? "text" : "password"} placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} required className="text-lg p-4"/>
                     <Button type="button" variant="ghost" size="icon" className="absolute right-2 top-8" onClick={() => setShowPassword(!showPassword)}>
                       {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                     </Button>
                   </div>
                   {emailAuthMode === 'signUp' && (
                     <div className="space-y-2 relative">
-                      <Label htmlFor="confirmPassword">Confirm Password</Label>
-                      <Input id="confirmPassword" type={showConfirmPassword ? "text" : "password"} placeholder="••••••••" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required className="text-lg p-4"/>
+                      <Label htmlFor="email-auth-confirmPassword">Confirm Password</Label>
+                      <Input id="email-auth-confirmPassword" type={showConfirmPassword ? "text" : "password"} placeholder="••••••••" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required className="text-lg p-4"/>
                       <Button type="button" variant="ghost" size="icon" className="absolute right-2 top-8" onClick={() => setShowConfirmPassword(!showConfirmPassword)}>
                         {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                       </Button>
@@ -415,8 +449,8 @@ export default function AuthPage() {
             <CardContent>
               <form onSubmit={handleSendOtp} className="space-y-6">
                 <div className="space-y-2">
-                  <Label htmlFor="phone">Phone (e.g. +254712345678)</Label>
-                  <Input id="phone" type="tel" placeholder="+254 XXX XXX XXX" value={phoneNumber} onChange={(e) => setPhoneNumber(e.target.value)} required className="text-lg p-4"/>
+                  <Label htmlFor="phone-otp-input">Phone (e.g. +254712345678)</Label>
+                  <Input id="phone-otp-input" type="tel" placeholder="+254 XXX XXX XXX" value={phoneNumber} onChange={(e) => setPhoneNumber(e.target.value)} required className="text-lg p-4"/>
                 </div>
                 <Button type="submit" className="w-full text-lg py-6 bg-primary" disabled={isLoading || authLoading || !recaptchaVerifier}>
                   {isLoading ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : "Send OTP"}
@@ -453,7 +487,6 @@ export default function AuthPage() {
         return (
             <>
             <CardHeader>
-              {/* Back button logic needs to consider the auth method chosen */}
                <Button variant="ghost" size="icon" className="absolute top-4 left-4" onClick={() => handlePrevSlide(authMethod === "phone" ? "otpVerification" : (authMethod === "email" ? "emailAuth" : "authMethodSelection"))}><ArrowLeft className="h-5 w-5" /></Button>
               <CardTitle className="text-2xl pt-8 text-center">Complete Your Profile</CardTitle>
               <CardDescription className="text-center">You&apos;re joining as a {userRole}.</CardDescription>
@@ -462,7 +495,7 @@ export default function AuthPage() {
               <form onSubmit={handleProfileSubmit} className="space-y-4">
                  <div className="flex flex-col items-center space-y-3">
                     {profilePicPreview ? (
-                      <Image src={profilePicPreview} alt="Profile Preview" width={100} height={100} data-ai-hint="profile image" className="rounded-full object-cover h-24 w-24 border-2 border-primary"/>
+                      <Image src={profilePicPreview} alt="Profile Preview" width={100} height={100} data-ai-hint="profile avatar" className="rounded-full object-cover h-24 w-24 border-2 border-primary"/>
                     ) : (
                       <div className="h-24 w-24 rounded-full bg-muted flex items-center justify-center border-2 border-dashed border-primary">
                         <UserPlus className="h-10 w-10 text-muted-foreground" />
@@ -479,11 +512,22 @@ export default function AuthPage() {
                   <Input id="fullName" placeholder="Your Full Name" value={fullName} onChange={(e) => setFullName(e.target.value)} required className="text-lg p-3"/>
                 </div>
                 <div className="space-y-1">
+                  <Label htmlFor="formPhoneNumber">Phone Number</Label>
+                  <Input 
+                    id="formPhoneNumber" 
+                    type="tel" 
+                    placeholder="+2547XXXXXXXX" 
+                    value={formPhoneNumber} 
+                    onChange={(e) => setFormPhoneNumber(e.target.value)} 
+                    required 
+                    className="text-lg p-3"
+                  />
+                </div>
+                <div className="space-y-1">
                   <Label htmlFor="bio">Bio (Optional)</Label>
                   <Textarea id="bio" placeholder="Tell us a bit about yourself..." value={bio} onChange={(e) => setBio(e.target.value)} className="text-lg p-3" rows={3}/>
                 </div>
                 
-                {/* "I'm a Creator" switch could be pre-filled and disabled if role is already set */}
                 <div className="flex items-center space-x-2 pt-2">
                   <Switch id="isCreatorSwitch" checked={userRole === 'creator'} disabled/> 
                   <Label htmlFor="isCreatorSwitch" className="text-base">
@@ -506,7 +550,7 @@ export default function AuthPage() {
 
                 <Button type="submit" className="w-full text-lg py-6 bg-accent hover:bg-accent/90 text-accent-foreground" disabled={isLoading || authLoading}>
                   {isLoading ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <CheckCircle className="mr-2 h-5 w-5" />}
-                  Submit & Go 🎉
+                  Submit &amp; Go 🎉
                 </Button>
               </form>
             </CardContent>
@@ -538,3 +582,4 @@ export default function AuthPage() {
     </div>
   );
 }
+
