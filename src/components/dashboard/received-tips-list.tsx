@@ -1,22 +1,27 @@
 
 "use client";
 
-import type { Tip } from '@/types';
+import type { Tip, User } from '@/types';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { formatDistanceToNow } from 'date-fns';
 import Link from 'next/link';
 import { db } from '@/lib/firebase';
-import { collection, query, where, orderBy, getDocs, Timestamp } from 'firebase/firestore';
+import { collection, query, where, orderBy, getDocs, doc, getDoc, Timestamp } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
-import { Loader2, Coins, TrendingDown } from 'lucide-react'; // Using Coins or TrendingDown for received tips
+import { Loader2, Coins, UserCircle } from 'lucide-react';
 
 interface ReceivedTipsListProps {
   creatorId: string;
 }
 
+interface EnrichedTip extends Tip {
+  supporterProfile?: Partial<User>;
+}
+
 export function ReceivedTipsList({ creatorId }: ReceivedTipsListProps) {
-  const [receivedTips, setReceivedTips] = useState<Tip[]>([]);
+  const [enrichedTips, setEnrichedTips] = useState<EnrichedTip[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -34,16 +39,41 @@ export function ReceivedTipsList({ creatorId }: ReceivedTipsListProps) {
         const tipsRef = collection(db, 'tips');
         const q = query(tipsRef, where('toCreatorId', '==', creatorId), orderBy('timestamp', 'desc'));
         const querySnapshot = await getDocs(q);
+        
         const fetchedTips: Tip[] = [];
-        querySnapshot.forEach((doc) => {
-          const data = doc.data();
+        querySnapshot.forEach((tipDoc) => {
+          const data = tipDoc.data();
           fetchedTips.push({ 
-            id: doc.id, 
+            id: tipDoc.id, 
             ...data,
             timestamp: (data.timestamp as Timestamp)?.toDate ? (data.timestamp as Timestamp).toDate().toISOString() : data.timestamp,
           } as Tip);
         });
-        setReceivedTips(fetchedTips);
+
+        // Fetch supporter profiles
+        const supporterIds = Array.from(new Set(fetchedTips.map(tip => tip.fromUserId)));
+        const supporterProfiles: Record<string, Partial<User>> = {};
+
+        for (const id of supporterIds) {
+          if (id === 'anonymous') continue; // Skip fetching for explicitly anonymous
+          try {
+            const userDocRef = doc(db, 'users', id);
+            const userDocSnap = await getDoc(userDocRef);
+            if (userDocSnap.exists()) {
+              supporterProfiles[id] = { id: userDocSnap.id, ...userDocSnap.data() } as Partial<User>;
+            }
+          } catch (profileError) {
+            console.warn(`Could not fetch profile for supporter ${id}:`, profileError);
+          }
+        }
+
+        const finalEnrichedTips = fetchedTips.map(tip => ({
+          ...tip,
+          supporterProfile: tip.fromUserId !== 'anonymous' ? supporterProfiles[tip.fromUserId] : undefined
+        }));
+
+        setEnrichedTips(finalEnrichedTips);
+
       } catch (err) {
         console.error("Error fetching received tips:", err);
         setError("Failed to load received tips. Please try again.");
@@ -54,6 +84,13 @@ export function ReceivedTipsList({ creatorId }: ReceivedTipsListProps) {
 
     fetchReceivedTips();
   }, [creatorId]);
+
+  const getInitials = (name?: string | null) => {
+    if (!name) return "?";
+    const names = name.split(' ');
+    if (names.length === 1) return names[0].substring(0, 2).toUpperCase();
+    return names[0][0].toUpperCase() + names[names.length - 1][0].toUpperCase();
+  };
 
   if (loading) {
     return (
@@ -68,7 +105,7 @@ export function ReceivedTipsList({ creatorId }: ReceivedTipsListProps) {
     return <p className="text-center text-destructive py-8">{error}</p>;
   }
 
-  if (receivedTips.length === 0) {
+  if (enrichedTips.length === 0) {
     return (
       <div className="text-center py-8 animate-fade-in">
         <Coins className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
@@ -93,14 +130,24 @@ export function ReceivedTipsList({ creatorId }: ReceivedTipsListProps) {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {receivedTips.map((tip, index) => (
+          {enrichedTips.map((tip, index) => (
             <TableRow 
               key={tip.id} 
               className="animate-slide-up"
               style={{animationDelay: `${index * 0.05}s`}}
             >
-              <TableCell className="font-medium">
-                {tip.fromUsername || 'Anonymous Supporter'}
+              <TableCell>
+                <div className="flex items-center gap-2">
+                  <Avatar className="h-8 w-8">
+                    <AvatarImage src={tip.supporterProfile?.profilePicUrl || undefined} alt={tip.fromUsername} data-ai-hint="avatar supporter" />
+                    <AvatarFallback>
+                      {tip.fromUserId === 'anonymous' ? 'A' : getInitials(tip.supporterProfile?.fullName || tip.fromUsername)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <span className="font-medium">
+                    {tip.fromUserId === 'anonymous' ? 'Anonymous Supporter' : (tip.supporterProfile?.fullName || tip.fromUsername || 'Supporter')}
+                  </span>
+                </div>
               </TableCell>
               <TableCell className="text-right font-semibold text-accent">{tip.amount.toLocaleString()}</TableCell>
               <TableCell className="max-w-xs truncate text-muted-foreground">
