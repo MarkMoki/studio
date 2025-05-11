@@ -11,6 +11,10 @@
         {
           "fieldPath": "featured",
           "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "totalAmountReceived",
+          "order": "DESCENDING"
         }
       ]
     },
