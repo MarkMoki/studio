@@ -6,16 +6,17 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth';
 import { Sidebar, SidebarProvider, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarContent, SidebarHeader, SidebarTrigger, SidebarInset } from '@/components/ui/sidebar';
 import { Button } from '@/components/ui/button';
-import { Home, BarChart3, Coins, Send, Settings, Edit3, User, LogOut, HandCoins, Sparkles, Loader2, ShieldAlert } from 'lucide-react';
+import { Home, BarChart3, Coins, Send, Settings, Edit3, User, LogOut, HandCoins, Sparkles, Loader2, ShieldAlert, Users as UsersIcon } from 'lucide-react';
 import Image from 'next/image';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
-import React from 'react'; // Added React import
+import React from 'react'; 
 
 const creatorNavItems = [
   { href: '/creator/dashboard', label: 'Dashboard', icon: <BarChart3 /> },
   { href: '/creator/tips', label: 'Tips Received', icon: <Coins /> },
   { href: '/creator/withdrawals', label: 'Withdrawals', icon: <Send /> },
+  { href: '/creators', label: 'Explore Creators', icon: <UsersIcon /> },
   { href: '/creator/settings', label: 'Profile Settings', icon: <Settings /> },
 ];
 
@@ -77,7 +78,7 @@ export default function CreatorDashboardLayout({
                     tooltip={item.label}
                     className="justify-start group-data-[collapsible=icon]:justify-center"
                   >
-                    {item.icon}
+                    {React.cloneElement(item.icon as React.ReactElement, { className: "h-5 w-5"})}
                     <span className="group-data-[collapsible=icon]:hidden">{item.label}</span>
                   </SidebarMenuButton>
                 </Link>
@@ -102,20 +103,20 @@ export default function CreatorDashboardLayout({
 
        {/* Mobile Bottom Navigation */}
       <nav className="fixed inset-x-0 bottom-0 z-50 border-t bg-background/95 backdrop-blur-sm md:hidden">
-        <div className="container mx-auto grid h-16 grid-cols-4 items-center gap-2 px-4">
+        <div className="container mx-auto grid h-16 grid-cols-5 items-center gap-1 px-2"> {/* Changed to grid-cols-5 and gap-1 */}
           {creatorNavItems.map((item) => (
             <Link
               key={item.href}
               href={item.href}
               className={cn(
-                "flex flex-col items-center justify-center gap-1 rounded-md p-2 text-xs font-medium transition-colors",
-                pathname === item.href || (pathname.startsWith(item.href) && item.href !== '/creator/dashboard')
+                "flex flex-col items-center justify-center gap-1 rounded-md p-1 text-xs font-medium transition-colors", // Reduced padding
+                (pathname === item.href || (pathname.startsWith(item.href) && item.href !== '/creator/dashboard' && item.href !== '/creators')) || (pathname.startsWith('/creators') && item.href === '/creators')
                   ? "text-primary bg-primary/10"
                   : "text-muted-foreground hover:bg-muted hover:text-foreground"
               )}
             >
               {React.cloneElement(item.icon as React.ReactElement, { className: "h-5 w-5"})}
-              {item.label.split(' ')[0]} {/* Show first word for brevity */}
+              <span className="truncate w-full text-center">{item.label.split(' ')[0]}</span> {/* Ensure text fits */}
             </Link>
           ))}
         </div>

@@ -1,3 +1,4 @@
+
 "use client"
 
 import * as React from "react"
@@ -549,12 +550,24 @@ const SidebarMenuButton = React.forwardRef<
       size = "default",
       tooltip,
       className,
+      children, // Added children prop
       ...props
     },
     ref
   ) => {
     const Comp = asChild ? Slot : "button"
     const { isMobile, state } = useSidebar()
+
+    const buttonChildren = React.Children.map(children, child => {
+      if (React.isValidElement(child) && typeof child.type !== 'string' && (child.type as any).displayName?.includes('Icon')) {
+         // Automatically apply size class to icons if not already sized by parent
+        return React.cloneElement(child as React.ReactElement, { 
+          className: cn("h-4 w-4 shrink-0", (child.props as any).className) 
+        });
+      }
+      return child;
+    });
+
 
     const button = (
       <Comp
@@ -564,7 +577,9 @@ const SidebarMenuButton = React.forwardRef<
         data-active={isActive}
         className={cn(sidebarMenuButtonVariants({ variant, size }), className)}
         {...props}
-      />
+      >
+        {buttonChildren}
+      </Comp>
     )
 
     if (!tooltip) {
