@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, type ChangeEvent } from 'react';
@@ -70,7 +69,7 @@ export function TippingModal({ creator }: TippingModalProps) {
 
   const handleSuggestMessage = async () => {
     if (!finalAmount || finalAmount <= 0) {
-      toast({ title: "Amount Required", description: "Please enter or select a tip amount first.", variant = "destructive" });
+      toast({ title: "Amount Required", description: "Please enter or select a tip amount first.", variant: "destructive" });
       return;
     }
     setIsSuggesting(true);
@@ -83,7 +82,7 @@ export function TippingModal({ creator }: TippingModalProps) {
       toast({ title: "Message Suggested!", description: "AI has generated a message for you." });
     } catch (error) {
       console.error("Error suggesting message:", error);
-      toast({ title: "Suggestion Failed", description: "Could not generate message. Please try again.", variant = "destructive" });
+      toast({ title: "Suggestion Failed", description: "Could not generate message. Please try again.", variant: "destructive" });
     } finally {
       setIsSuggesting(false);
     }
@@ -91,12 +90,12 @@ export function TippingModal({ creator }: TippingModalProps) {
 
   const handleSubmitTip = async () => {
     if (!authUser) {
-      toast({ title: "Not Authenticated", description: "Please sign in to send a tip.", variant = "destructive" });
-      setIsOpen(false); // Close modal, user needs to sign in
+      toast({ title: "Not Authenticated", description: "Please sign in to send a tip.", variant: "destructive" });
+      setIsOpen(false); 
       return;
     }
     if (!finalAmount || finalAmount <= 0) {
-       toast({ title: "Invalid Amount", description: "Please enter a valid tip amount.", variant = "destructive" });
+       toast({ title: "Invalid Amount", description: "Please enter a valid tip amount.", variant: "destructive" });
       return;
     }
 
@@ -104,27 +103,25 @@ export function TippingModal({ creator }: TippingModalProps) {
     setErrorDetails(null);
 
     try {
-      // 1. Create the tip document
-      const newTip: Omit<Tip, 'id' | 'timestamp'> & { timestamp: any } = { // Allow serverTimestamp
+      const newTip: Omit<Tip, 'id' | 'timestamp'> & { timestamp: any } = { 
         fromUserId: authUser.id,
         fromUsername: authUser.username || authUser.fullName || 'Anonymous Tipper',
         toCreatorId: creator.id,
-        toCreatorHandle: creator.tipHandle,
+        toCreatorHandle: creator.tipHandle || null, // Ensure not undefined
         amount: finalAmount,
-        message: message || null,
-        paymentRef: `mpesa_sim_${Date.now()}`, // Placeholder for M-Pesa simulation
-        status: 'successful', // Assume successful for now
-        timestamp: serverTimestamp(), // Firestore will convert this
+        message: message.trim() === '' ? null : message.trim(), // Set to null if empty
+        paymentRef: `mpesa_sim_${Date.now()}`, 
+        status: 'successful', 
+        timestamp: serverTimestamp(), 
       };
       const tipsCollectionRef = collection(db, 'tips');
-      const tipDocRef = await addDoc(tipsCollectionRef, newTip);
+      await addDoc(tipsCollectionRef, newTip); // No need to capture tipDocRef if not used
 
-      // 2. Update creator's stats in a transaction
       const creatorDocRef = doc(db, 'creators', creator.id);
       await runTransaction(db, async (transaction) => {
         const creatorDoc = await transaction.get(creatorDocRef);
         if (!creatorDoc.exists()) {
-          throw "Creator document not found!";
+          throw new Error("Creator document not found!"); // Use new Error
         }
         const currentTotalTips = creatorDoc.data().totalTips || 0;
         const currentTotalAmountReceived = creatorDoc.data().totalAmountReceived || 0;
@@ -157,7 +154,6 @@ export function TippingModal({ creator }: TippingModalProps) {
 
   useEffect(() => {
     if(isOpen && currentStep !== 'confirmation' && currentStep !== 'error') {
-      // Reset parts of form if re-opened to form step, but not if it's already on confirmation/error
       setAmount(presetAmounts[1]);
       setCustomAmount('');
       setMessage('');
@@ -168,8 +164,8 @@ export function TippingModal({ creator }: TippingModalProps) {
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => {
-      if (!open) resetFormAndClose(); // Reset fully on close intent
-      else setIsOpen(true); // Only set to open if not already
+      if (!open) resetFormAndClose(); 
+      else setIsOpen(true); 
     }}>
       <DialogTrigger asChild>
         <Button size="lg" className="w-full bg-accent hover:bg-accent/90 text-accent-foreground text-lg py-6 shadow-md animate-pulse hover:animate-none">

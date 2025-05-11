@@ -60,7 +60,7 @@ export default function AuthPage() {
   // Profile completion form states
   const [username, setUsername] = useState("");
   const [fullName, setFullName] = useState("");
-  const [formPhoneNumber, setFormPhoneNumber] = useState(""); // For profile completion form
+  const [formPhoneNumber, setFormPhoneNumber] = useState(""); // For profile completion form, initialized to empty string
   const [profilePicFile, setProfilePicFile] = useState<File | null>(null);
   const [profilePicPreview, setProfilePicPreview] = useState<string | null>(null);
   const [tipHandle, setTipHandle] = useState('');
@@ -89,12 +89,15 @@ export default function AuthPage() {
   const { toast } = useToast();
 
   useEffect(() => {
-    if (!authLoading && user && user.fullName) { 
+    if (!authLoading && user && user.fullName && user.phoneNumber) { // Check for essential profile fields
       router.push("/dashboard");
-    } else if (!authLoading && firebaseUser && !user?.fullName && currentSlide !== 'completeProfile') {
+    } else if (!authLoading && firebaseUser && (!user?.fullName || !user?.phoneNumber) && currentSlide !== 'completeProfile') {
       const fetchUserRoleAndTransition = async () => {
         let resolvedUserRole = userRole;
-        if (!resolvedUserRole) {
+        if (!resolvedUserRole && user?.isCreator !== undefined) {
+             resolvedUserRole = user.isCreator ? 'creator' : 'supporter';
+             setUserRole(resolvedUserRole);
+        } else if (!resolvedUserRole) {
             const userDocRef = doc(db, "users", firebaseUser.uid);
             const userDocSnap = await getDoc(userDocRef);
             if(userDocSnap.exists() && userDocSnap.data()?.isCreator !== undefined) {
@@ -104,50 +107,52 @@ export default function AuthPage() {
         }
         
         if(resolvedUserRole) {
-            // Pre-fill form fields for completeProfile slide
             if (firebaseUser.displayName && fullName === "") setFullName(firebaseUser.displayName);
             if (firebaseUser.photoURL && profilePicPreview === null) setProfilePicPreview(firebaseUser.photoURL);
+            // Ensure formPhoneNumber is set from firebaseUser.phoneNumber if available and form field is empty
             if (firebaseUser.phoneNumber && formPhoneNumber === "") setFormPhoneNumber(firebaseUser.phoneNumber);
-            // User's bio might already be in the 'user' object from useAuth if fetched, otherwise fetch from userDoc
-            const userDocRef = doc(db, "users", firebaseUser.uid);
-            const userDocSnap = await getDoc(userDocRef);
-            if (userDocSnap.exists() && userDocSnap.data()?.bio && bio === "") {
-                setBio(userDocSnap.data()?.bio);
+            else if (user?.phoneNumber && formPhoneNumber === "") setFormPhoneNumber(user.phoneNumber);
+
+
+            if (user?.bio && bio === "") setBio(user.bio);
+            if (user?.username && username === "") setUsername(user.username);
+            if (resolvedUserRole === 'creator') {
+                if(user?.tipHandle && tipHandle === "") setTipHandle(user.tipHandle);
+                if(user?.category && category === "") setCategory(user.category);
             }
+
 
             handleNextSlide("completeProfile");
         } else {
-            // If role is still unknown, might need to go back to role selection or handle error
-            // For now, assume they should go to roleSelection if profile is incomplete and role unknown
              if (currentSlide !== 'roleSelection') {
-                setCurrentSlide("roleSelection"); // Or a specific "choose role then complete profile" state
+                setCurrentSlide("roleSelection"); 
              }
         }
       };
       fetchUserRoleAndTransition();
     }
-  }, [user, firebaseUser, authLoading, router, currentSlide, userRole, fullName, profilePicPreview, formPhoneNumber, bio]);
+  }, [user, firebaseUser, authLoading, router, currentSlide, userRole, fullName, profilePicPreview, formPhoneNumber, bio, username, tipHandle, category]);
 
 
   useEffect(() => {
-    // Pre-fill form fields when transitioning to 'completeProfile' if firebaseUser details are available
-    // and the corresponding form fields are empty.
     if (currentSlide === 'completeProfile' && firebaseUser) {
-      if (firebaseUser.displayName && fullName === "") {
-        setFullName(firebaseUser.displayName);
+      if (firebaseUser.displayName && fullName === "") setFullName(firebaseUser.displayName);
+      if (firebaseUser.photoURL && profilePicPreview === null) setProfilePicPreview(firebaseUser.photoURL);
+      
+      // Prioritize formPhoneNumber if already set (e.g. from OTP step), else use firebaseUser.phoneNumber or user.phoneNumber
+      if (formPhoneNumber === "") {
+        if (firebaseUser.phoneNumber) setFormPhoneNumber(firebaseUser.phoneNumber);
+        else if (user?.phoneNumber) setFormPhoneNumber(user.phoneNumber);
       }
-      if (firebaseUser.photoURL && profilePicPreview === null) {
-        setProfilePicPreview(firebaseUser.photoURL);
-      }
-      if (firebaseUser.phoneNumber && formPhoneNumber === "") {
-        setFormPhoneNumber(firebaseUser.phoneNumber);
-      }
-      // Bio might be pre-filled from existing user data if they partially completed then returned
-      if (user?.bio && bio === "") {
-        setBio(user.bio);
+      
+      if (user?.bio && bio === "") setBio(user.bio);
+      if (user?.username && username === "") setUsername(user.username);
+      if (userRole === 'creator') {
+          if(user?.tipHandle && tipHandle === "") setTipHandle(user.tipHandle);
+          if(user?.category && category === "") setCategory(user.category);
       }
     }
-  }, [currentSlide, firebaseUser, user, fullName, profilePicPreview, formPhoneNumber, bio]);
+  }, [currentSlide, firebaseUser, user, userRole, fullName, profilePicPreview, formPhoneNumber, bio, username, tipHandle, category]);
 
 
   const initializeRecaptcha = async () => {
@@ -261,13 +266,14 @@ export default function AuthPage() {
     try {
       const result = await signInWithPhone(phoneNumber, recaptchaVerifier, userRole);
       setConfirmationResult(result);
-      setFormPhoneNumber(phoneNumber); // Pre-fill form phone number with OTP phone
+      setFormPhoneNumber(phoneNumber); 
       toast({ title: "OTP Sent", description: "Please check your messages." });
       handleNextSlide("otpVerification");
     } catch (error) {
       toast({ title: "OTP Send Failed", description: (error as Error).message, variant: "destructive" });
       if ((window as any).recaptchaVerifierInstance) (window as any).recaptchaVerifierInstance.clear();
-      await initializeRecaptcha();
+      setRecaptchaVerifier(undefined); // Reset verifier to allow re-initialization
+      await initializeRecaptcha(); // Re-initialize
     } finally {
       setIsLoading(false);
     }
@@ -284,6 +290,7 @@ export default function AuthPage() {
     setIsLoading(true);
     try {
       await confirmOtp(confirmationResult, otp, userRole);
+      // On success, onAuthStateChanged will trigger, potentially moving to completeProfile
     } catch (error) {
       toast({ title: "OTP Verification Failed", description: (error as Error).message, variant: "destructive" });
     } finally {
@@ -305,42 +312,59 @@ export default function AuthPage() {
         toast({ title: "Error", description: "Authentication or role information missing.", variant: "destructive" });
         return;
     }
-    if (!formPhoneNumber.match(/^\+254[17]\d{8}$/)) {
-        toast({ title: "Invalid Phone Number", description: "Format: +2547XXXXXXXX or +2541XXXXXXXX.", variant: "destructive" });
+    // Ensure formPhoneNumber is not empty and valid before submission
+    if (!formPhoneNumber || !formPhoneNumber.match(/^\+254[17]\d{8}$/)) {
+        toast({ title: "Invalid Phone Number", description: "Phone number is required. Format: +2547XXXXXXXX or +2541XXXXXXXX.", variant: "destructive" });
         return;
     }
-    const isCreatorProfile = userRole === 'creator';
-    if (isCreatorProfile && (!tipHandle || !category)) {
-        toast({ title: "Creator Info Missing", description: "Tip Handle and Category are required for creators.", variant: "destructive"});
+    if (!username.trim()) {
+        toast({ title: "Username Required", description: "Please enter a username.", variant: "destructive" });
         return;
+    }
+    if (!fullName.trim()) {
+        toast({ title: "Full Name Required", description: "Please enter your full name.", variant: "destructive" });
+        return;
+    }
+
+
+    const isCreatorProfile = userRole === 'creator';
+    if (isCreatorProfile) {
+        if (!tipHandle.match(/^@([a-zA-Z0-9_]+)$/)) {
+            toast({ title: "Invalid Tip Handle", description: "Tip Handle must start with @ and contain letters, numbers, or underscores.", variant: "destructive"});
+            return;
+        }
+        if (!category) {
+             toast({ title: "Creator Category Missing", description: "Category is required for creators.", variant: "destructive"});
+            return;
+        }
     }
     setIsLoading(true);
     
-    let profilePicUrl = firebaseUser.photoURL || null;
+    let finalProfilePicUrl = profilePicPreview || firebaseUser.photoURL || null;
     if (profilePicFile) {
         const storageRefVal = ref(storage, `users/${firebaseUser.uid}/profile.${profilePicFile.name.split('.').pop()}`);
         try {
             const snapshot = await uploadBytes(storageRefVal, profilePicFile);
-            profilePicUrl = await getDownloadURL(snapshot.ref);
+            finalProfilePicUrl = await getDownloadURL(snapshot.ref);
         } catch (error) {
-            toast({ title: "Image Upload Failed", variant: "destructive" }); setIsLoading(false); return;
+            toast({ title: "Image Upload Failed", description: (error as Error).message, variant: "destructive" }); setIsLoading(false); return;
         }
     }
 
-    const profileData: Partial<User> = {
-        username,
-        fullName,
-        phoneNumber: formPhoneNumber,
-        profilePicUrl,
+    const profileDataForCompletion: Partial<User> = {
+        username: username.trim(),
+        fullName: fullName.trim(),
+        phoneNumber: formPhoneNumber, // Guaranteed to be a valid string by validation
+        profilePicUrl: finalProfilePicUrl,
         isCreator: isCreatorProfile,
-        bio,
-        ...(isCreatorProfile && { tipHandle, category }),
+        bio: bio.trim() || null, // Send null if bio is empty
+        ...(isCreatorProfile && { tipHandle: tipHandle.trim(), category: category }),
     };
 
     try {
-        await completeUserProfile(profileData, userRole);
+        await completeUserProfile(profileDataForCompletion, userRole);
         toast({ title: "Profile Created! 🎉", description: "Welcome to TipKesho!" });
-        router.push("/dashboard");
+        // router.push("/dashboard"); // onAuthStateChanged will handle redirection
     } catch (error) {
         toast({ title: "Profile Creation Failed", description: (error as Error).message, variant: "destructive" });
     } finally {
@@ -512,7 +536,7 @@ export default function AuthPage() {
                   <Input id="fullName" placeholder="Your Full Name" value={fullName} onChange={(e) => setFullName(e.target.value)} required className="text-lg p-3"/>
                 </div>
                 <div className="space-y-1">
-                  <Label htmlFor="formPhoneNumber">Phone Number</Label>
+                  <Label htmlFor="formPhoneNumber">Phone Number (e.g. +2547XXXXXXXX)</Label>
                   <Input 
                     id="formPhoneNumber" 
                     type="tel" 
@@ -582,4 +606,3 @@ export default function AuthPage() {
     </div>
   );
 }
-

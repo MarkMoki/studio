@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, type FormEvent, type ChangeEvent } from 'react';
@@ -13,18 +12,18 @@ import { Loader2, Save, Trash2, PlusCircle, Camera } from 'lucide-react';
 import Image from 'next/image';
 import { db, storage } from '@/lib/firebase';
 import { doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
-import { useAuth } from '@/hooks/use-auth'; // To get current user for validation
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'; // Removed deleteObject for simplicity
+import { useAuth } from '@/hooks/use-auth'; 
 
 const creatorCategories = ["Art", "Music", "Dance", "Comedy", "Gaming", "Education", "Tech", "Lifestyle", "Other"];
 const socialPlatforms: SocialLink['platform'][] = ['twitter', 'instagram', 'facebook', 'youtube', 'tiktok', 'website', 'other'];
 
 interface CreatorPublicProfileFormProps {
-  creatorId: string; // This should be the Firebase Auth UID of the user
+  creatorId: string; 
 }
 
 export function CreatorPublicProfileForm({ creatorId }: CreatorPublicProfileFormProps) {
-  const { user: authUser, loading: authLoading } = useAuth(); // authUser is the AuthUser from context
+  const { user: authUser, loading: authLoading, updateUserFirestoreProfile } = useAuth(); 
   const [creator, setCreator] = useState<Partial<Creator>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -39,7 +38,7 @@ export function CreatorPublicProfileForm({ creatorId }: CreatorPublicProfileForm
     const fetchCreatorData = async () => {
       if (!creatorId) {
         setIsLoading(false);
-        toast({title: "Error", description: "Creator ID is missing.", variant = "destructive"});
+        toast({title: "Error", description: "Creator ID is missing.", variant : "destructive"});
         return;
       }
       setIsLoading(true);
@@ -51,16 +50,12 @@ export function CreatorPublicProfileForm({ creatorId }: CreatorPublicProfileForm
           setCreator(data);
           setProfilePicPreview(data.profilePicUrl || null);
           setCoverImagePreview(data.coverImageUrl || null);
-          // If user data also needs to be displayed (e.g. non-editable email)
-          // const userDocRef = doc(db, 'users', creatorId);
-          // const userDocSnap = await getDoc(userDocRef);
-          // if (userDocSnap.exists()) { /* ... set user specific data */ }
         } else {
-          toast({title: "Not Found", description: "Creator profile not found.", variant = "destructive"});
+          toast({title: "Not Found", description: "Creator profile not found.", variant : "destructive"});
         }
       } catch (error) {
         console.error("Error fetching creator data:", error);
-        toast({title: "Fetch Error", description: "Could not load creator profile.", variant = "destructive"});
+        toast({title: "Fetch Error", description: "Could not load creator profile.", variant : "destructive"});
       } finally {
         setIsLoading(false);
       }
@@ -97,9 +92,15 @@ export function CreatorPublicProfileForm({ creatorId }: CreatorPublicProfileForm
 
   const handleSocialLinkChange = (index: number, field: keyof SocialLink, value: string) => {
     const updatedLinks = [...(creator.socialLinks || [])];
-    updatedLinks[index] = { ...updatedLinks[index], [field]: value as SocialLink['platform'] }; // Ensure type safety for platform
+    // Ensure platform type safety
+    if (field === 'platform' && !socialPlatforms.includes(value as SocialLink['platform'])) {
+        console.warn("Invalid social platform selected:", value);
+        return; // Or set to 'other' as a default
+    }
+    updatedLinks[index] = { ...updatedLinks[index], [field]: value };
     setCreator(prev => ({ ...prev, socialLinks: updatedLinks }));
   };
+  
 
   const addSocialLink = () => {
     const newLink: SocialLink = { platform: 'other', url: '' };
@@ -114,73 +115,83 @@ export function CreatorPublicProfileForm({ creatorId }: CreatorPublicProfileForm
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!authUser || authUser.id !== creatorId) {
-      toast({ title: "Unauthorized", description: "You can only edit your own profile.", variant = "destructive" });
+      toast({ title: "Unauthorized", description: "You can only edit your own profile.", variant : "destructive" });
       return;
     }
+    if (!creator.category) {
+      toast({ title: "Category Required", description: "Please select your main content category.", variant : "destructive" });
+      return;
+    }
+
+
     setIsSubmitting(true);
 
-    let newProfilePicUrl = creator.profilePicUrl;
+    let newProfilePicUrl = creator.profilePicUrl || null;
     if (profilePicFile) {
       const filePath = `creators/${creatorId}/profile.${profilePicFile.name.split('.').pop()}`;
-      const storageRef = ref(storage, filePath);
+      const storageRefVal = ref(storage, filePath); // Renamed to avoid conflict with storage import
       try {
-        // If there was an old picture, consider deleting it (optional, or keep versions)
-        // if (creator.profilePicUrl && creator.profilePicUrl.includes(creatorId)) {
-        //   const oldFileRef = ref(storage, creator.profilePicUrl); try { await deleteObject(oldFileRef) } catch(e){console.warn("Old profile pic delete failed",e)}
-        // }
-        await uploadBytes(storageRef, profilePicFile);
-        newProfilePicUrl = await getDownloadURL(storageRef);
+        await uploadBytes(storageRefVal, profilePicFile);
+        newProfilePicUrl = await getDownloadURL(storageRefVal);
       } catch (error) {
-        toast({ title: "Profile Pic Upload Failed", description: (error as Error).message, variant = "destructive" });
+        toast({ title: "Profile Pic Upload Failed", description: (error as Error).message, variant : "destructive" });
         setIsSubmitting(false); return;
       }
     }
 
-    let newCoverImageUrl = creator.coverImageUrl;
+    let newCoverImageUrl = creator.coverImageUrl || null;
     if (coverImageFile) {
       const filePath = `creators/${creatorId}/cover.${coverImageFile.name.split('.').pop()}`;
-      const storageRef = ref(storage, filePath);
+      const storageRefVal = ref(storage, filePath); // Renamed
       try {
-        await uploadBytes(storageRef, coverImageFile);
-        newCoverImageUrl = await getDownloadURL(storageRef);
+        await uploadBytes(storageRefVal, coverImageFile);
+        newCoverImageUrl = await getDownloadURL(storageRefVal);
       } catch (error) {
-        toast({ title: "Cover Image Upload Failed", description: (error as Error).message, variant = "destructive" });
+        toast({ title: "Cover Image Upload Failed", description: (error as Error).message, variant : "destructive" });
         setIsSubmitting(false); return;
       }
     }
     
-    const updatedCreatorData: Partial<Creator> = {
-      ...creator,
+    const validSocialLinks = (creator.socialLinks || [])
+        .map(link => ({
+            platform: link.platform,
+            url: link.url || null // Ensure url is null if empty
+        }))
+        .filter(link => link.platform && link.url && link.url.trim() !== ''); // Filter out links with no url
+
+    const dataForCreatorDoc: Partial<Creator> = {
+      fullName: creator.fullName || null,
+      bio: creator.bio || null,
+      category: creator.category, // Already validated
+      socialLinks: validSocialLinks,
       profilePicUrl: newProfilePicUrl,
       coverImageUrl: newCoverImageUrl,
       updatedAt: serverTimestamp(),
     };
-    // Remove id and userId from the update object as they are immutable or part of doc path
-    delete updatedCreatorData.id; 
-    delete updatedCreatorData.userId;
-
+    // tipHandle is not editable here, so we don't include it.
+    // Remove any top-level undefined properties before sending to Firestore
+    const finalCreatorUpdates = Object.fromEntries(Object.entries(dataForCreatorDoc).filter(([_,v])=> v !== undefined)) as Partial<Creator>;
 
     try {
       const creatorDocRef = doc(db, 'creators', creatorId);
-      await updateDoc(creatorDocRef, updatedCreatorData);
+      await updateDoc(creatorDocRef, finalCreatorUpdates);
       
-      // Also update corresponding fields in the user's document in 'users' collection if denormalized
-      const userDocRef = doc(db, 'users', creatorId);
-      const userUpdateData: Partial<User> = {
-          fullName: updatedCreatorData.fullName,
-          profilePicUrl: newProfilePicUrl,
-          bio: updatedCreatorData.bio,
-          tipHandle: updatedCreatorData.tipHandle,
-          category: updatedCreatorData.category,
-          updatedAt: serverTimestamp(),
-      };
-      await updateDoc(userDocRef, userUpdateData);
+      // Prepare data for user document update (denormalized fields)
+      const dataForUserDoc: Partial<User> = { updatedAt: serverTimestamp() };
+      if (finalCreatorUpdates.fullName !== undefined) dataForUserDoc.fullName = finalCreatorUpdates.fullName;
+      if (finalCreatorUpdates.profilePicUrl !== undefined) dataForUserDoc.profilePicUrl = finalCreatorUpdates.profilePicUrl;
+      if (finalCreatorUpdates.bio !== undefined) dataForUserDoc.bio = finalCreatorUpdates.bio;
+      if (finalCreatorUpdates.category !== undefined) dataForUserDoc.category = finalCreatorUpdates.category;
+      // tipHandle is not changed here, so no need to update it in user doc from here
 
+      if (Object.keys(dataForUserDoc).length > 1) { // If more than just updatedAt
+        await updateUserFirestoreProfile(creatorId, dataForUserDoc); // Uses the cleaned update from useAuth
+      }
 
       toast({ title: "Profile Saved! ✨", description: "Your public creator profile has been updated." });
     } catch (error) {
       console.error("Error updating creator profile:", error);
-      toast({ title: "Update Failed", description: (error as Error).message, variant = "destructive" });
+      toast({ title: "Update Failed", description: (error as Error).message, variant : "destructive" });
     } finally {
       setIsSubmitting(false);
     }
@@ -263,7 +274,7 @@ export function CreatorPublicProfileForm({ creatorId }: CreatorPublicProfileForm
       
       <div>
         <Label htmlFor="category" className="text-base font-semibold">Primary Category</Label>
-         <Select onValueChange={handleCategoryChange} value={creator.category || ''}>
+         <Select onValueChange={handleCategoryChange} value={creator.category || ''} required>
             <SelectTrigger id="category" className="w-full mt-1">
               <SelectValue placeholder="Select your main content category" />
             </SelectTrigger>
@@ -310,7 +321,7 @@ export function CreatorPublicProfileForm({ creatorId }: CreatorPublicProfileForm
               <Input 
                 id={`socialUrl-${index}`} 
                 type="url" 
-                value={link.url} 
+                value={link.url || ''} 
                 onChange={(e) => handleSocialLinkChange(index, 'url', e.target.value)} 
                 placeholder="https://..."
                 className="mt-1"
