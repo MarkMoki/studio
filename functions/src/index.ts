@@ -28,16 +28,20 @@ interface SendTipData {
 export const sendTipViaMpesa = functions.runWith({ secrets: ["FLUTTERWAVE_SECRET_KEY"] })
   .https.onCall(async (data: SendTipData, context) => {
   // Log the invocation with details that can help debug, including origin
-  functions.logger.info("sendTipViaMpesa function invoked.", { 
-    data, 
+  const invocationTime = Date.now();
+  const errorRefBase = `CF_TIPKESHO_${invocationTime}`;
+
+  functions.logger.info("sendTipViaMpesa function invoked.", {
+    data,
     authContext: context.auth !== null,
     // @ts-ignore rawRequest might not be in official types but can be useful for debugging
-    requestOrigin: context.rawRequest?.headers?.origin, // This helps identify the calling origin for CORS issues
+    requestOrigin: context.rawRequest?.headers?.origin,
     // @ts-ignore
-    requestHeaders: context.rawRequest?.headers 
+    requestHeaders: context.rawRequest?.headers,
+    invocationTime
   });
 
-  try { 
+  try {
     if (!context.auth) {
       functions.logger.warn("User is not authenticated.");
       throw new functions.https.HttpsError("unauthenticated", "User must be authenticated to send a tip.");
@@ -53,7 +57,7 @@ export const sendTipViaMpesa = functions.runWith({ secrets: ["FLUTTERWAVE_SECRET
         "Use `firebase functions:secrets:set FLUTTERWAVE_SECRET_KEY` and then redeploy the function. " +
         "If using emulators, ensure it's set in your .env file or functions config for emulation.";
       functions.logger.error(detailedErrorMessage);
-      throw new functions.https.HttpsError("internal", "Payment provider configuration error. Please contact support. Ref: FSK_MISSING");
+      throw new functions.https.HttpsError("internal", `Payment provider configuration error. Please contact support. Ref: FSK_MISSING_${errorRefBase}`);
     }
     functions.logger.info("Flutterwave secret key is present.");
 
@@ -87,7 +91,7 @@ export const sendTipViaMpesa = functions.runWith({ secrets: ["FLUTTERWAVE_SECRET
     const creatorAmount = Math.round((tipAmount - platformFee) * 100) / 100;
     const txRef = `TIPKESHO-${uuidv4()}`;
 
-    let toCreatorHandle = `creator_${toCreatorId.substring(0, 5)}`; 
+    let toCreatorHandle = `creator_${toCreatorId.substring(0, 5)}`;
     try {
       const creatorDoc = await db.collection("creators").doc(toCreatorId).get();
       if (creatorDoc.exists) {
@@ -113,26 +117,26 @@ export const sendTipViaMpesa = functions.runWith({ secrets: ["FLUTTERWAVE_SECRET
       creatorAmount: creatorAmount,
       message: message || null,
       mpesaPhone: tipperPhoneNumber,
-      platformReceivingMpesa: "+254791556369", 
+      platformReceivingMpesa: "+254791556369",
       paymentRef: txRef,
       paymentProvider: "flutterwave",
-      paymentStatus: "initiated" as const, 
+      paymentStatus: "initiated" as const,
       timestamp: admin.firestore.FieldValue.serverTimestamp(),
     };
 
     try {
       await tipDocRef.set(tipInitialData);
       functions.logger.info(`Initial tip document created in Firestore for tip ID: ${tipDocRef.id}`);
-    } catch (error) {
-      functions.logger.error("Error creating initial tip document in Firestore:", { tipId: tipDocRef.id, error });
-      throw new functions.https.HttpsError("internal", "Failed to record tip initiation. Please try again. Ref: FSTORE_INIT_FAIL");
+    } catch (error: any) {
+      functions.logger.error("Error creating initial tip document in Firestore:", { tipId: tipDocRef.id, error, errorMessage: error.message });
+      throw new functions.https.HttpsError("internal", `Failed to record tip initiation. Please try again. Ref: FSTORE_INIT_FAIL_${errorRefBase}`);
     }
 
     const flutterwavePayload = {
       tx_ref: txRef,
       amount: tipAmount.toString(),
       currency: "KES",
-      redirect_url: "https://tipkesho.com/payment-callback/flutterwave", 
+      redirect_url: "https://tipkesho.com/payment-callback/flutterwave",
       payment_options: "mpesa",
       customer: {
         email: tipperEmail || context.auth.token?.email || `supporter_${fromUserId.substring(0,5)}@tipkesho.com`,
@@ -142,7 +146,7 @@ export const sendTipViaMpesa = functions.runWith({ secrets: ["FLUTTERWAVE_SECRET
       customizations: {
         title: `Tip to ${toCreatorHandle} on TipKesho`,
         description: `Supporting creative talent. Tip Amount: KES ${tipAmount}`,
-        logo: "https://tipkesho.com/logo.png", 
+        logo: "https://tipkesho.com/logo.png",
       },
       meta: {
         tip_id: tipDocRef.id,
@@ -150,7 +154,7 @@ export const sendTipViaMpesa = functions.runWith({ secrets: ["FLUTTERWAVE_SECRET
         to_creator_id: toCreatorId,
       },
     };
-    functions.logger.info("Prepared Flutterwave payload.", { txRef });
+    functions.logger.info("Prepared Flutterwave payload.", { txRef, payload: flutterwavePayload });
 
     try {
       const response = await axios.post(FLUTTERWAVE_API_URL, flutterwavePayload, {
@@ -159,7 +163,7 @@ export const sendTipViaMpesa = functions.runWith({ secrets: ["FLUTTERWAVE_SECRET
           "Content-Type": "application/json",
         },
       });
-      functions.logger.info(`Flutterwave API response status: ${response.status}`, { txRef });
+      functions.logger.info(`Flutterwave API response status: ${response.status}`, { txRef, responseStatus: response.status, responseData: response.data });
 
 
       if (response.data && response.data.status === "success") {
@@ -179,34 +183,70 @@ export const sendTipViaMpesa = functions.runWith({ secrets: ["FLUTTERWAVE_SECRET
           flutterwaveResponse: response.data || { error: "No data in response" },
         });
         throw new functions.https.HttpsError("aborted",
-          response.data?.message || "Payment initiation failed with provider. Ref: FW_API_FAIL"
+          response.data?.message || `Payment initiation failed with provider. Ref: FW_API_FAIL_${errorRefBase}`
         );
       }
     } catch (error: any) {
-      functions.logger.error("Error during Flutterwave API call or updating tip document:", { txRef, error });
-      const errorResponseData = axios.isAxiosError(error) ? error.response?.data : null;
-      const errorMessage = axios.isAxiosError(error) ? (error.response?.data?.message || error.message) : (error.message || "Unknown error");
-
-      await tipDocRef.update({
-        paymentStatus: "error_initiation" as const,
-        flutterwaveError: errorResponseData || { message: error.message, stack: error.stack } || "Unknown error during API call",
-      }).catch(updateError => {
-        functions.logger.error("Critical: Failed to update tip document after Flutterwave error", { tipId: tipDocRef.id, updateError });
+      // Log extended error information
+      functions.logger.error("Error during Flutterwave API call or updating tip document:", {
+        txRef,
+        errorName: error.name,
+        errorMessage: error.message,
+        errorStack: error.stack,
+        axiosErrorDetails: axios.isAxiosError(error) ? {
+          status: error.response?.status,
+          data: error.response?.data,
+          headers: error.response?.headers,
+          config: error.config,
+        } : "Not an Axios error",
+        fullErrorObject: JSON.stringify(error, Object.getOwnPropertyNames(error)), // Attempt to serialize the whole error
+        errorRef: `FW_CATCH_${errorRefBase}`
       });
+
+      try {
+        await tipDocRef.update({
+          paymentStatus: "error_initiation" as const,
+          flutterwaveError: axios.isAxiosError(error) ?
+            (error.response?.data || { message: error.message, code: error.code }) :
+            { message: error.message, name: error.name, code: error.code, stack: error.stack } || "Unknown error during API call",
+        });
+      } catch (updateError: any) {
+        functions.logger.error("CRITICAL: Failed to update tip document after Flutterwave error", { tipId: tipDocRef.id, updateError, updateErrorMessage: updateError.message, errorRef: `FW_UPDATE_FAIL_${errorRefBase}` });
+      }
+
+      const clientErrorMessage = axios.isAxiosError(error) ? (error.response?.data?.message || error.message) : (error.message || "Unknown error");
 
       if (axios.isAxiosError(error) && error.response) {
         throw new functions.https.HttpsError("internal",
-          `Payment provider error: ${errorMessage}. Ref: FW_AXIOS_ERR`
+          `Payment provider error: ${clientErrorMessage}. Ref: FW_AXIOS_ERR_${error.response.status || 'NO_STATUS'}_${errorRefBase}`
         );
       }
-      throw new functions.https.HttpsError("internal", `An error occurred while processing the payment. ${errorMessage}. Ref: FW_GEN_ERR`);
+      throw new functions.https.HttpsError("internal", `An error occurred while processing the payment. ${clientErrorMessage}. Ref: FW_GEN_ERR_${errorRefBase}`);
     }
   } catch (error: any) {
-    functions.logger.error("Unhandled error in sendTipViaMpesa function:", { error: error.message, stack: error.stack, details: error.details });
-    if (error instanceof functions.https.HttpsError) {
-      throw error; 
+    let detailedClientErrorMessage = "An unexpected error occurred. Please try again.";
+    if (error.message) {
+      detailedClientErrorMessage += ` Message: ${error.message}.`;
     }
-    throw new functions.https.HttpsError("internal", `An unexpected error occurred. Please try again. Ref: TOP_LVL_CATCH - ${error.message}`);
+    if (error.code) {
+        detailedClientErrorMessage += ` Code: ${error.code}.`;
+    }
+    const finalErrorRef = `CF_UNHANDLED_FINAL_${errorRefBase}`;
+    detailedClientErrorMessage += ` ${finalErrorRef}`;
+
+    functions.logger.error("Unhandled error in sendTipViaMpesa function:", {
+        errorMessage: error.message,
+        errorCode: error.code,
+        errorStack: error.stack,
+        errorDetails: error.details, // HttpsError specific
+        fullErrorObject: JSON.stringify(error, Object.getOwnPropertyNames(error)),
+        errorRef: finalErrorRef
+    });
+
+    if (error instanceof functions.https.HttpsError) {
+      throw error;
+    }
+    throw new functions.https.HttpsError("internal", detailedClientErrorMessage);
   }
 });
 
@@ -218,3 +258,4 @@ export const exampleHttpRequestWithCors = functions.https.onRequest((req, res) =
     res.json({ message: "CORS enabled for this HTTP request!" });
   });
 });
+
