@@ -3,6 +3,7 @@
 
 import type { Tip, User } from '@/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button"; // Added import
 import { Bell, Gift, UserPlus, TrendingUp, Coins, Send, Loader2, AlertTriangle, Newspaper } from "lucide-react";
 import { formatDistanceToNow } from 'date-fns';
 import { db } from '@/lib/firebase';
@@ -164,3 +165,4 @@ export function ActivityFeed() {
     </Card>
   );
 }
+
