@@ -25,9 +25,16 @@ interface SendTipData {
 
 export const sendTipViaMpesa = functions.runWith({ secrets: ["FLUTTERWAVE_SECRET_KEY"] })
   .https.onCall(async (data: SendTipData, context) => {
-  functions.logger.info("sendTipViaMpesa function invoked.", { data, authContext: context.auth !== null });
+  functions.logger.info("sendTipViaMpesa function invoked.", { 
+    data, 
+    authContext: context.auth !== null,
+    // @ts-ignore rawRequest might not be in official types but can be useful for debugging
+    requestOrigin: context.rawRequest?.headers?.origin,
+    // @ts-ignore
+    requestHeaders: context.rawRequest?.headers 
+  });
 
-  try { // Top-level try-catch for the entire function body
+  try { 
     if (!context.auth) {
       functions.logger.warn("User is not authenticated.");
       throw new functions.https.HttpsError("unauthenticated", "User must be authenticated to send a tip.");
@@ -77,7 +84,7 @@ export const sendTipViaMpesa = functions.runWith({ secrets: ["FLUTTERWAVE_SECRET
     const creatorAmount = Math.round((tipAmount - platformFee) * 100) / 100;
     const txRef = `TIPKESHO-${uuidv4()}`;
 
-    let toCreatorHandle = `creator_${toCreatorId.substring(0, 5)}`; // Default handle
+    let toCreatorHandle = `creator_${toCreatorId.substring(0, 5)}`; 
     try {
       const creatorDoc = await db.collection("creators").doc(toCreatorId).get();
       if (creatorDoc.exists) {
@@ -88,7 +95,6 @@ export const sendTipViaMpesa = functions.runWith({ secrets: ["FLUTTERWAVE_SECRET
       }
     } catch (error) {
       functions.logger.error(`Error fetching creator handle for ${toCreatorId}:`, error);
-      // Continue with default handle, log error
     }
 
     const tipDocRef = db.collection("tips").doc();
@@ -104,10 +110,10 @@ export const sendTipViaMpesa = functions.runWith({ secrets: ["FLUTTERWAVE_SECRET
       creatorAmount: creatorAmount,
       message: message || null,
       mpesaPhone: tipperPhoneNumber,
-      platformReceivingMpesa: "+254791556369", // TODO: Make this configurable
+      platformReceivingMpesa: "+254791556369", 
       paymentRef: txRef,
       paymentProvider: "flutterwave",
-      paymentStatus: "initiated" as const, // Ensure type safety
+      paymentStatus: "initiated" as const, 
       timestamp: admin.firestore.FieldValue.serverTimestamp(),
     };
 
@@ -123,7 +129,7 @@ export const sendTipViaMpesa = functions.runWith({ secrets: ["FLUTTERWAVE_SECRET
       tx_ref: txRef,
       amount: tipAmount.toString(),
       currency: "KES",
-      redirect_url: "https://tipkesho.com/payment-callback/flutterwave", // TODO: Make this dynamic or a placeholder
+      redirect_url: "https://tipkesho.com/payment-callback/flutterwave", 
       payment_options: "mpesa",
       customer: {
         email: tipperEmail || context.auth.token?.email || `supporter_${fromUserId.substring(0,5)}@tipkesho.com`,
@@ -133,7 +139,7 @@ export const sendTipViaMpesa = functions.runWith({ secrets: ["FLUTTERWAVE_SECRET
       customizations: {
         title: `Tip to ${toCreatorHandle} on TipKesho`,
         description: `Supporting creative talent. Tip Amount: KES ${tipAmount}`,
-        logo: "https://tipkesho.com/logo.png", // TODO: Update placeholder
+        logo: "https://tipkesho.com/logo.png", 
       },
       meta: {
         tip_id: tipDocRef.id,
@@ -157,7 +163,6 @@ export const sendTipViaMpesa = functions.runWith({ secrets: ["FLUTTERWAVE_SECRET
         functions.logger.info("Flutterwave payment initiation successful.", { txRef, responseData: response.data });
         await tipDocRef.update({
           flutterwaveResponse: response.data,
-          // paymentStatus: "pending_confirmation" // Status remains 'initiated' until webhook confirms
         });
         return {
           success: true,
@@ -196,21 +201,15 @@ export const sendTipViaMpesa = functions.runWith({ secrets: ["FLUTTERWAVE_SECRET
   } catch (error: any) {
     functions.logger.error("Unhandled error in sendTipViaMpesa function:", { error: error.message, stack: error.stack, details: error.details });
     if (error instanceof functions.https.HttpsError) {
-      throw error; // Re-throw HttpsError as is
+      throw error; 
     }
-    // For other types of errors, wrap them in an HttpsError
     throw new functions.https.HttpsError("internal", `An unexpected error occurred. Please try again. Ref: TOP_LVL_CATCH - ${error.message}`);
   }
 });
 
-// This is an example of how you might add CORS to an HTTP onRequest function.
-// For onCall functions, Firebase SDKs typically handle this.
-// If CORS issues persist with onCall, it often means the invoking client origin
-// (e.g., your web app's domain) is not authorized in the Google Cloud Console
-// for the specific API (`cloudfunctions.googleapis.com`).
+
 export const exampleHttpRequestWithCors = functions.https.onRequest((req, res) => {
   cors(req, res, async () => {
-    // Your function logic here
     res.json({ message: "CORS enabled for this HTTP request!" });
   });
 });

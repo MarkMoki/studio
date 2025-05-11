@@ -41,18 +41,17 @@ async function getCreator(id: string): Promise<Creator | null> {
         if (ts instanceof Timestamp) {
           return ts.toDate().toISOString();
         }
-        // Handle cases where it might be a plain object from Firestore but not a Timestamp instance
         if (ts && typeof ts.seconds === 'number' && typeof ts.nanoseconds === 'number') {
             return new Timestamp(ts.seconds, ts.nanoseconds).toDate().toISOString();
         }
-        if (typeof ts === 'string') { // Already a string
+        if (typeof ts === 'string') { 
           return ts;
         }
-        if (ts instanceof Date) { // Already a Date object
+        if (ts instanceof Date) { 
           return ts.toISOString();
         }
         console.warn("Unrecognized timestamp format:", ts);
-        return new Date().toISOString(); // Fallback, though ideally should match actual data or be null
+        return new Date().toISOString(); 
       };
 
       return {
@@ -78,15 +77,14 @@ async function getCreator(id: string): Promise<Creator | null> {
     return null;
   } catch (error) {
     console.error("Error fetching creator:", error);
+    if ((error as any).code === 'failed-precondition' && (error as any).message.includes('requires an index')) {
+      console.error("Firestore query failed due to a missing index. Please create the required composite index in your Firebase console for the 'creators' collection, likely involving 'active', 'featured', and 'totalAmountReceived' fields.");
+    }
     return null;
   }
 }
 
 export default async function CreatorProfilePage({ params }: { params: { creatorId: string } }) {
-  // Awaiting params directly isn't standard. params is available in Server Components.
-  // The warning "params should be awaited" might be a misinterpretation by the linter or related to deeper Next.js internals
-  // if the page structure leads to params being treated as a promise in some contexts.
-  // However, for a standard dynamic route Server Component, params is directly usable.
   const creator = await getCreator(params.creatorId);
 
   if (!creator) {
@@ -94,7 +92,7 @@ export default async function CreatorProfilePage({ params }: { params: { creator
       <div className="text-center py-20 animate-fade-in">
         <AlertTriangle className="w-16 h-16 text-destructive mx-auto mb-6" />
         <h1 className="text-3xl font-semibold mb-3">Creator Not Found</h1>
-        <p className="text-muted-foreground mb-6">The creator profile you are looking for does not exist or could not be loaded. This might be due to a permission issue or an invalid ID.</p>
+        <p className="text-muted-foreground mb-6">The creator profile you are looking for does not exist or could not be loaded. This might be due to a permission issue, an invalid ID, or a missing Firestore index for querying creators.</p>
         <Button asChild variant="outline">
           <Link href="/creators">Back to Creators</Link>
         </Button>
@@ -115,7 +113,7 @@ export default async function CreatorProfilePage({ params }: { params: { creator
             style={{ objectFit: 'cover' }}
             className="opacity-80 group-hover:opacity-100 transition-opacity duration-300"
             data-ai-hint="abstract pattern"
-            sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw" // Added sizes prop
+            sizes="100vw" 
             priority
           />
            <div className="absolute inset-0 bg-gradient-to-t from-background via-transparent to-transparent opacity-60"></div>

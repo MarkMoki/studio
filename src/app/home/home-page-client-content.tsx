@@ -13,16 +13,16 @@ import { FeaturedCreatorsClient } from "./featured-creators-client";
 import { PlatformHighlights } from "@/components/home/platform-highlights";
 import type { Creator } from '@/types';
 import { cn } from "@/lib/utils";
-import { useAuth } from '@/hooks/use-auth'; // Keep useAuth for potential UI changes based on auth state
+import { useAuth } from '@/hooks/use-auth'; 
 
 interface HomePageClientContentProps {
   featuredCreatorsData: Creator[];
 }
 
 export function HomePageClientContent({ featuredCreatorsData }: HomePageClientContentProps) {
-  const { loading: authLoading } = useAuth(); // Still might want to show a loader if content depends on auth indirectly
+  const { loading: authLoading } = useAuth(); 
 
-  if (authLoading) { // This loader is for content that might depend on non-redirect auth checks
+  if (authLoading) { 
     return (
       <div className="flex flex-col items-center justify-center min-h-[calc(100vh-10rem)]">
         <Loader2 className="h-16 w-16 animate-spin text-primary" />
@@ -124,6 +124,7 @@ export function HomePageClientContent({ featuredCreatorsData }: HomePageClientCo
               width={600}
               height={400}
               className="mx-auto aspect-video overflow-hidden rounded-xl object-cover sm:w-full lg:order-last lg:aspect-square shadow-xl transform hover:scale-105 transition-transform duration-500"
+              sizes="(max-width: 640px) 100vw, 600px"
               priority
             />
             </motion.div>

@@ -65,14 +65,13 @@ export default function SupporterDashboardPage() {
                 const q = query(
                     creatorsRef,
                     where('active', '==', true),
-                    // orderBy('featured', 'desc'), // Removed for broader suggestions
                     orderBy('totalAmountReceived', 'desc'),
                     limit(3) 
                 );
                 const querySnapshot = await getDocs(q);
                 const fetchedCreators: Creator[] = [];
                 querySnapshot.forEach((doc) => {
-                  if (doc.id !== user.id) { // Ensure not suggesting self if somehow possible
+                  if (doc.id !== user.id) { 
                     fetchedCreators.push({ id: doc.id, ...doc.data() } as Creator);
                   }
                 });
@@ -100,7 +99,6 @@ export default function SupporterDashboardPage() {
     );
   }
 
-  // AppRouterRedirect handles this, but as a fallback.
   if (!user || user.isCreator || !user.fullName || !user.phoneNumber) return null;
 
 
@@ -177,6 +175,7 @@ export default function SupporterDashboardPage() {
                           data-ai-hint={creator.profilePicUrl ? "profile creator" : "abstract pattern"}
                           width={200} height={150} 
                           className="w-full h-32 object-cover group-hover:scale-105 transition-transform"
+                          sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 200px"
                        />
                     </CardHeader>
                     <CardContent className="p-4">
