@@ -6,6 +6,8 @@ import { v4 as uuidv4 } from "uuid";
 import corsLib from "cors";
 
 // Initialize cors middleware
+// This allows all origins. For `onRequest` functions, this middleware should be used.
+// For `onCall` functions, CORS is generally handled by the Firebase/GCP infrastructure.
 const cors = corsLib({ origin: true });
 
 admin.initializeApp();
@@ -25,11 +27,12 @@ interface SendTipData {
 
 export const sendTipViaMpesa = functions.runWith({ secrets: ["FLUTTERWAVE_SECRET_KEY"] })
   .https.onCall(async (data: SendTipData, context) => {
+  // Log the invocation with details that can help debug, including origin
   functions.logger.info("sendTipViaMpesa function invoked.", { 
     data, 
     authContext: context.auth !== null,
     // @ts-ignore rawRequest might not be in official types but can be useful for debugging
-    requestOrigin: context.rawRequest?.headers?.origin,
+    requestOrigin: context.rawRequest?.headers?.origin, // This helps identify the calling origin for CORS issues
     // @ts-ignore
     requestHeaders: context.rawRequest?.headers 
   });
@@ -209,7 +212,9 @@ export const sendTipViaMpesa = functions.runWith({ secrets: ["FLUTTERWAVE_SECRET
 
 
 export const exampleHttpRequestWithCors = functions.https.onRequest((req, res) => {
+  // Apply CORS middleware
   cors(req, res, async () => {
+    // Your function logic here
     res.json({ message: "CORS enabled for this HTTP request!" });
   });
 });
