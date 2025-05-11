@@ -3,18 +3,13 @@
 import { useAuth } from "@/hooks/use-auth";
 import { CreatorStats } from "@/components/dashboard/creator-stats";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Share2, Link as LinkIcon, Loader2, BarChart3, Users, Coins } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import Link from "next/link";
+import { ReceivedTipsList } from "@/components/dashboard/received-tips-list"; // For Recent Supporters
 
-// Mock data for recent supporters/top supporters - replace with actual data fetching
-const mockRecentSupporters = [
-  { id: '1', name: 'Aisha N.', amount: 250, message: "Love your art!" },
-  { id: '2', name: 'John K.', amount: 100, message: "Keep it up!" },
-  { id: '3', name: 'Brenda W.', amount: 500, message: "Amazing content!" },
-];
-
+// Mock data for top supporters - replace with actual data fetching
 const mockTopSupporters = [
   { id: '3', name: 'Brenda W.', totalTipped: 1500 },
   { id: '1', name: 'Aisha N.', totalTipped: 750 },
@@ -30,14 +25,19 @@ export default function CreatorDashboardPage() {
   }
 
   if (!user || !user.isCreator) {
-    // This should ideally be handled by layout auth guard
-    return <p>Access Denied. You must be a creator to view this page.</p>;
+    // This should ideally be handled by layout auth guard / AppRouterRedirect
+    return <div className="text-center py-10"><p className="text-destructive">Access Denied. You must be a creator to view this page.</p><Link href="/auth"><Button className="mt-4">Sign In</Button></Link></div>;
+  }
+  if (!user.fullName || !user.phoneNumber) { // Profile incomplete
+    // This should ideally be handled by AppRouterRedirect
+     return <div className="text-center py-10"><p className="text-destructive">Your profile is incomplete.</p><Link href="/auth"><Button className="mt-4">Complete Profile</Button></Link></div>;
   }
 
-  const tipLink = user.tipHandle ? `${window.location.origin}/creators/${user.id}` : 'Not set';
+
+  const tipLink = user.tipHandle ? `${typeof window !== 'undefined' ? window.location.origin : ''}/creators/${user.id}` : 'Not set';
 
   const handleShareLink = () => {
-    if (user.tipHandle) {
+    if (user.tipHandle && typeof window !== 'undefined') {
       navigator.clipboard.writeText(tipLink)
         .then(() => toast({ title: "Link Copied!", description: "Your TipKesho link is copied to clipboard." }))
         .catch(() => toast({ title: "Copy Failed", description: "Could not copy link. Please try manually.", variant: "destructive" }));
@@ -55,10 +55,10 @@ export default function CreatorDashboardPage() {
             <CardDescription className="text-lg text-muted-foreground">Here&apos;s what&apos;s happening with your TipKesho profile.</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col sm:flex-row gap-4">
-            <Button onClick={handleShareLink} size="lg" className="bg-primary hover:bg-primary/90 text-primary-foreground">
+            <Button onClick={handleShareLink} size="lg" className="bg-primary hover:bg-primary/90 text-primary-foreground w-full sm:w-auto">
               <Share2 className="mr-2 h-5 w-5" /> Share Your Tip Link
             </Button>
-            <Button asChild variant="outline" size="lg">
+            <Button asChild variant="outline" size="lg" className="w-full sm:w-auto">
               <Link href="/creator/withdrawals">
                 <Coins className="mr-2 h-5 w-5" /> Manage Withdrawals
               </Link>
@@ -69,30 +69,18 @@ export default function CreatorDashboardPage() {
 
       <CreatorStats creatorId={user.id} />
 
-      <div className="grid md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <Card className="shadow-lg animate-slide-up" style={{animationDelay: '0.3s'}}>
           <CardHeader>
             <CardTitle className="flex items-center gap-2"><Users className="text-primary"/> Recent Supporters</CardTitle>
-            <CardDescription>Latest fans who&apos;ve tipped you.</CardDescription>
+            <CardDescription>Latest fans who&apos;ve tipped you (shows latest 5).</CardDescription>
           </CardHeader>
-          <CardContent>
-            {mockRecentSupporters.length > 0 ? (
-              <ul className="space-y-3">
-                {mockRecentSupporters.map(supporter => (
-                  <li key={supporter.id} className="flex justify-between items-center p-3 bg-secondary/50 rounded-md">
-                    <div>
-                      <p className="font-semibold">{supporter.name}</p>
-                      <p className="text-xs text-muted-foreground truncate max-w-[150px] sm:max-w-xs">{supporter.message}</p>
-                    </div>
-                    <span className="font-bold text-accent">KES {supporter.amount}</span>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-muted-foreground text-center py-4">No recent supporters yet.</p>
-            )}
-             <Button variant="link" asChild className="mt-4 text-primary p-0"><Link href="/creator/tips">View All Tips</Link></Button>
+          <CardContent className="max-h-96 overflow-y-auto"> {/* Added max-height and overflow for long lists */}
+            <ReceivedTipsList creatorId={user.id} /> {/* Shows its own loading/empty states */}
           </CardContent>
+          <CardFooter>
+             <Button variant="link" asChild className="text-primary p-0"><Link href="/creator/tips">View All Tips</Link></Button>
+          </CardFooter>
         </Card>
 
         <Card className="shadow-lg animate-slide-up" style={{animationDelay: '0.4s'}}>
@@ -100,11 +88,11 @@ export default function CreatorDashboardPage() {
             <CardTitle className="flex items-center gap-2"><BarChart3 className="text-primary"/> Top Supporters</CardTitle>
             <CardDescription>Your most generous fans.</CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="max-h-96 overflow-y-auto"> {/* Added max-height and overflow */}
             {mockTopSupporters.length > 0 ? (
             <ul className="space-y-3">
               {mockTopSupporters.map(supporter => (
-                <li key={supporter.id} className="flex justify-between items-center p-3 bg-secondary/50 rounded-md">
+                <li key={supporter.id} className="flex flex-col sm:flex-row justify-between items-start sm:items-center p-3 bg-secondary/50 rounded-md gap-2 sm:gap-0">
                   <p className="font-semibold">{supporter.name}</p>
                   <span className="font-bold text-green-500">KES {supporter.totalTipped.toLocaleString()}</span>
                 </li>
@@ -123,9 +111,9 @@ export default function CreatorDashboardPage() {
             <CardDescription>Status of your requested payouts.</CardDescription>
         </CardHeader>
         <CardContent className="text-center">
+            {/* This section should ideally fetch and display actual pending withdrawals */}
             <p className="text-muted-foreground py-4">No pending withdrawals currently.</p>
-            {/* Logic to display pending withdrawals will go here */}
-            <Button asChild variant="default" className="bg-accent hover:bg-accent/90 text-accent-foreground">
+            <Button asChild variant="default" className="bg-accent hover:bg-accent/90 text-accent-foreground w-full sm:w-auto">
               <Link href="/creator/withdrawals">
                 Request a Withdrawal
               </Link>

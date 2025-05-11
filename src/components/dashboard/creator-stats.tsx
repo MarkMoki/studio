@@ -12,6 +12,7 @@ import { DollarSign, Gift, Users, TrendingUp, Download, Loader2, AlertTriangle }
 import { db } from '@/lib/firebase';
 import { collection, query, where, orderBy, getDocs, doc, getDoc, Timestamp } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 
 interface CreatorStatsProps {
   creatorId: string;
@@ -143,7 +144,7 @@ export function CreatorStats({ creatorId }: CreatorStatsProps) {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatCard title="Total Earnings" value={`KES ${totalEarnings.toLocaleString()}`} icon={<DollarSign className="h-6 w-6 text-primary" />} delay="0.1s" />
         <StatCard title="Total Tips Received" value={totalTipsCount.toLocaleString()} icon={<Gift className="h-6 w-6 text-primary" />} delay="0.2s" />
         <StatCard title="Average Tip Amount" value={`KES ${averageTipAmount.toFixed(2)}`} icon={<TrendingUp className="h-6 w-6 text-primary" />} delay="0.3s" />
@@ -157,10 +158,10 @@ export function CreatorStats({ creatorId }: CreatorStatsProps) {
         </CardHeader>
         <CardContent className="h-[300px] md:h-[350px]">
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={chartData} margin={{ top: 5, right: 20, left: -20, bottom: 5 }}>
+            <LineChart data={chartData} margin={{ top: 5, right: 10, left: -25, bottom: 5 }}> {/* Adjusted margins for better responsiveness */}
               <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.2}/>
-              <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-              <YAxis tick={{ fontSize: 12 }} tickFormatter={(value) => `KES ${value}`}/>
+              <XAxis dataKey="name" tick={{ fontSize: 10 }} /> {/* Smaller font for XAxis */}
+              <YAxis tick={{ fontSize: 10 }} tickFormatter={(value) => `KES ${value}`}/> {/* Smaller font for YAxis */}
               <Tooltip 
                 formatter={(value: number) => [`KES ${value.toLocaleString()}`, "Earnings"]}
                 contentStyle={{ backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))', borderRadius: 'var(--radius)'}}
@@ -186,7 +187,7 @@ export function CreatorStats({ creatorId }: CreatorStatsProps) {
       </Card>
 
       <Card className="animate-slide-up" style={{animationDelay: '0.4s'}}>
-        <CardHeader className="flex flex-row justify-between items-center">
+        <CardHeader className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2"> {/* Responsive header */}
           <div>
             <CardTitle>Recent Tips Log</CardTitle>
             <CardDescription>Latest tips you&apos;ve received (max 5 shown).</CardDescription>
@@ -212,7 +213,7 @@ export function CreatorStats({ creatorId }: CreatorStatsProps) {
                     <TableRow key={tip.id}>
                       <TableCell className="font-medium">{tip.fromUsername || 'Anonymous'}</TableCell>
                       <TableCell className="text-right font-semibold text-green-500">{tip.amount.toLocaleString()}</TableCell>
-                      <TableCell className="max-w-xs truncate text-muted-foreground">
+                      <TableCell className="max-w-[150px] sm:max-w-xs truncate text-muted-foreground"> {/* Responsive max-width */}
                         {tip.message || <span className="italic">No message</span>}
                       </TableCell>
                       <TableCell className="text-right text-sm text-muted-foreground">
@@ -227,6 +228,11 @@ export function CreatorStats({ creatorId }: CreatorStatsProps) {
              <p className="text-center text-muted-foreground py-4">No tips received yet.</p>
           )}
         </CardContent>
+        <CardFooter>
+            <Button variant="link" asChild className="text-primary">
+                <Link href="/creator/tips">View All Tips</Link>
+            </Button>
+        </CardFooter>
       </Card>
 
       <Card className="animate-slide-up" style={{animationDelay: '0.5s'}}>
@@ -236,8 +242,10 @@ export function CreatorStats({ creatorId }: CreatorStatsProps) {
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-lg font-semibold">Available Balance: <span className="text-primary">KES {totalEarnings.toLocaleString()}</span></p>
-          <Button className="w-full md:w-auto bg-accent hover:bg-accent/90 text-accent-foreground" disabled>
-            Withdraw via M-Pesa (Coming Soon)
+          <Button asChild className="w-full md:w-auto bg-accent hover:bg-accent/90 text-accent-foreground">
+            <Link href="/creator/withdrawals">
+                Withdraw via M-Pesa
+            </Link>
           </Button>
           <p className="text-xs text-muted-foreground">Withdrawals are processed securely. Standard M-Pesa transaction fees may apply.</p>
         </CardContent>
@@ -259,4 +267,3 @@ function StatCard({ title, value, icon, delay }: { title: string; value: string;
     </Card>
   );
 }
-
