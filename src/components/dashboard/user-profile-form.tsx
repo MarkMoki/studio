@@ -56,7 +56,7 @@ export function UserProfileForm({ user: initialUser }: UserProfileFormProps) {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
       if (file.size > 2 * 1024 * 1024) { // Max 2MB
-          toast({ title: "File too large", description: "Profile picture must be less than 2MB.", variant = "destructive" });
+          toast({ title: "File too large", description: "Profile picture must be less than 2MB.", variant: "destructive" });
           return;
       }
       setProfilePicFile(file);
@@ -71,7 +71,7 @@ export function UserProfileForm({ user: initialUser }: UserProfileFormProps) {
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!firebaseUser) {
-      toast({ title: "Not Authenticated", description: "Please sign in again.", variant = "destructive" });
+      toast({ title: "Not Authenticated", description: "Please sign in again.", variant: "destructive" });
       return;
     }
     setIsSubmitting(true);
@@ -85,7 +85,7 @@ export function UserProfileForm({ user: initialUser }: UserProfileFormProps) {
         await uploadBytes(storageRef, profilePicFile);
         updatedProfilePicUrl = await getDownloadURL(storageRef);
       } catch (error) {
-        toast({ title: "Image Upload Failed", description: (error as Error).message, variant = "destructive" });
+        toast({ title: "Image Upload Failed", description: (error as Error).message, variant: "destructive" });
         setIsSubmitting(false);
         return;
       }
@@ -122,7 +122,7 @@ export function UserProfileForm({ user: initialUser }: UserProfileFormProps) {
       toast({ title: "Profile Updated", description: "Your profile information has been saved." });
     } catch (error) {
       console.error("Error updating profile:", error);
-      toast({ title: "Update Failed", description: (error as Error).message, variant = "destructive" });
+      toast({ title: "Update Failed", description: (error as Error).message, variant: "destructive" });
     } finally {
       setIsSubmitting(false);
     }
@@ -189,8 +189,8 @@ export function UserProfileForm({ user: initialUser }: UserProfileFormProps) {
       {initialUser.isCreator && (
          <div className="pt-2 text-sm text-muted-foreground">
             You are a registered creator. To edit your public creator details like category or social links, go to{' '}
-            <Link href="/dashboard/creator-profile" className="text-primary hover:underline">
-              Creator Profile Settings
+            <Link href="/creator/settings" className="text-primary hover:underline">
+              Public Creator Profile Settings
             </Link>.
         </div>
       )}
@@ -205,3 +205,4 @@ export function UserProfileForm({ user: initialUser }: UserProfileFormProps) {
     </form>
   );
 }
+
