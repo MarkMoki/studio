@@ -1,4 +1,3 @@
-
 import type { Creator } from '@/types';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
@@ -8,7 +7,7 @@ import { TippingModal } from '@/components/tipping/tipping-modal';
 import { Gift, Users, Palette, Music, Drama, Mic2, Link as LinkIcon, Mail, Phone, Twitter, Instagram, Facebook, Youtube, Globe, Link2, AlertTriangle } from 'lucide-react';
 import Link from 'next/link';
 import { db } from '@/lib/firebase';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, Timestamp } from 'firebase/firestore';
 import { AvatarImageClient } from './avatar-image-client'; // Client component for avatar
 
 const categoryIcons: { [key: string]: React.ReactNode } = {
@@ -35,17 +34,32 @@ async function getCreator(id: string): Promise<Creator | null> {
     const creatorDocSnap = await getDoc(creatorDocRef);
 
     if (creatorDocSnap.exists()) {
-      // The creator document should already contain the necessary email and phoneNumber fields
-      // as per the Creator type and data population logic in onboarding/profile updates.
-      // These fields are denormalized into the 'creators' collection.
-      const creatorDataWithId = { id: creatorDocSnap.id, ...creatorDocSnap.data() } as Creator;
-      return creatorDataWithId;
+      const data = creatorDocSnap.data();
+      const creatorData: Creator = {
+        id: creatorDocSnap.id,
+        userId: data.userId,
+        tipHandle: data.tipHandle,
+        fullName: data.fullName || null,
+        profilePicUrl: data.profilePicUrl || null,
+        coverImageUrl: data.coverImageUrl || null,
+        bio: data.bio || null,
+        totalTips: data.totalTips || 0,
+        totalAmountReceived: data.totalAmountReceived || 0,
+        category: data.category,
+        active: data.active,
+        featured: data.featured,
+        socialLinks: data.socialLinks || null,
+        // Convert Timestamps to ISO strings
+        createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate().toISOString() : (data.createdAt || new Date().toISOString()),
+        updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate().toISOString() : (data.updatedAt || null),
+        email: data.email || null,
+        phoneNumber: data.phoneNumber || null,
+      };
+      return creatorData;
     }
     return null;
   } catch (error) {
     console.error("Error fetching creator:", error);
-    // Firestore permission errors or other issues will be caught here.
-    // The page will then display a "Creator Not Found" message.
     return null;
   }
 }
@@ -110,7 +124,7 @@ export default async function CreatorProfilePage({ params }: { params: { creator
               <h3 className="text-xl font-semibold mb-3 text-center md:text-left">Follow Me</h3>
               <div className="flex justify-center md:justify-start flex-wrap gap-3">
                 {creator.socialLinks.map((link) => (
-                  <Button key={link.platform} variant="outline" size="icon" asChild className="transform hover:scale-110 hover:border-primary transition-all duration-200 rounded-full">
+                  <Button key={link.platform + link.url} variant="outline" size="icon" asChild className="transform hover:scale-110 hover:border-primary transition-all duration-200 rounded-full">
                     <a href={link.url} target="_blank" rel="noopener noreferrer" aria-label={`${link.platform} profile`}>
                       {socialIcons[link.platform] || <LinkIcon className="w-5 h-5" />}
                     </a>
@@ -120,7 +134,6 @@ export default async function CreatorProfilePage({ params }: { params: { creator
             </div>
           )}
 
-          {/* Contact info now directly from creator object */}
           { (creator.email || creator.phoneNumber) && (
             <div className="pt-6 border-t">
               <h3 className="text-xl font-semibold mb-3 text-center md:text-left">Contact Information</h3>
