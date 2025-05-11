@@ -2,11 +2,11 @@
 "use client";
 
 import type { Tip, Creator } from '@/types';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Progress } from "@/components/ui/progress";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { format, subDays, parseISO } from 'date-fns';
 import { DollarSign, Gift, Users, TrendingUp, Download, Loader2, AlertTriangle } from 'lucide-react';
 import { db } from '@/lib/firebase';
@@ -31,7 +31,6 @@ const generateChartData = (tips: Tip[]): ChartDataPoint[] => {
   }
 
   tips.forEach(tip => {
-    // Ensure tip.timestamp is a Date object or can be converted
     let tipDate: Date;
     if (tip.timestamp instanceof Timestamp) {
       tipDate = tip.timestamp.toDate();
@@ -41,7 +40,7 @@ const generateChartData = (tips: Tip[]): ChartDataPoint[] => {
       tipDate = tip.timestamp;
     } else {
       console.warn("Invalid timestamp format for tip:", tip.id);
-      return; // Skip this tip if timestamp is unusable
+      return; 
     }
     
     const formattedDate = format(tipDate, 'MMM d');
@@ -72,7 +71,6 @@ export function CreatorStats({ creatorId }: CreatorStatsProps) {
       setLoading(true);
       setError(null);
       try {
-        // Fetch creator details
         const creatorDocRef = doc(db, 'creators', creatorId);
         const creatorDocSnap = await getDoc(creatorDocRef);
         if (creatorDocSnap.exists()) {
@@ -81,7 +79,6 @@ export function CreatorStats({ creatorId }: CreatorStatsProps) {
           throw new Error("Creator profile not found.");
         }
 
-        // Fetch received tips
         const tipsRef = collection(db, 'tips');
         const q = query(tipsRef, where('toCreatorId', '==', creatorId), orderBy('timestamp', 'desc'));
         const tipsSnapshot = await getDocs(q);
@@ -134,10 +131,10 @@ export function CreatorStats({ creatorId }: CreatorStatsProps) {
     );
   }
 
-  const totalEarnings = creator.totalAmountReceived; // Use value from creator doc
-  const totalTipsCount = creator.totalTips; // Use value from creator doc
+  const totalEarnings = creator.totalAmountReceived; 
+  const totalTipsCount = creator.totalTips; 
   const averageTipAmount = totalTipsCount > 0 ? totalEarnings / totalTipsCount : 0;
-  const monthlyGoal = 50000; // Example monthly goal, could be stored in creator doc
+  const monthlyGoal = 50000; 
   const progressToGoal = Math.min((totalEarnings / monthlyGoal) * 100, 100);
   const uniqueSupporters = (new Set(receivedTips.map(t => t.fromUserId))).size;
 
@@ -158,10 +155,10 @@ export function CreatorStats({ creatorId }: CreatorStatsProps) {
         </CardHeader>
         <CardContent className="h-[300px] md:h-[350px]">
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={chartData} margin={{ top: 5, right: 10, left: -25, bottom: 5 }}> {/* Adjusted margins for better responsiveness */}
+            <LineChart data={chartData} margin={{ top: 5, right: 10, left: -25, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.2}/>
-              <XAxis dataKey="name" tick={{ fontSize: 10 }} /> {/* Smaller font for XAxis */}
-              <YAxis tick={{ fontSize: 10 }} tickFormatter={(value) => `KES ${value}`}/> {/* Smaller font for YAxis */}
+              <XAxis dataKey="name" tick={{ fontSize: 10 }} /> 
+              <YAxis tick={{ fontSize: 10 }} tickFormatter={(value) => `KES ${value}`}/> 
               <Tooltip 
                 formatter={(value: number) => [`KES ${value.toLocaleString()}`, "Earnings"]}
                 contentStyle={{ backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))', borderRadius: 'var(--radius)'}}
@@ -187,12 +184,12 @@ export function CreatorStats({ creatorId }: CreatorStatsProps) {
       </Card>
 
       <Card className="animate-slide-up" style={{animationDelay: '0.4s'}}>
-        <CardHeader className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2"> {/* Responsive header */}
+        <CardHeader className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2"> 
           <div>
             <CardTitle>Recent Tips Log</CardTitle>
             <CardDescription>Latest tips you&apos;ve received (max 5 shown).</CardDescription>
           </div>
-          <Button variant="outline" size="sm" disabled> {/* Export functionality TBD */}
+          <Button variant="outline" size="sm" disabled> 
             <Download className="h-4 w-4 mr-2" /> Export Log
           </Button>
         </CardHeader>
@@ -213,7 +210,7 @@ export function CreatorStats({ creatorId }: CreatorStatsProps) {
                     <TableRow key={tip.id}>
                       <TableCell className="font-medium">{tip.fromUsername || 'Anonymous'}</TableCell>
                       <TableCell className="text-right font-semibold text-green-500">{tip.amount.toLocaleString()}</TableCell>
-                      <TableCell className="max-w-[150px] sm:max-w-xs truncate text-muted-foreground"> {/* Responsive max-width */}
+                      <TableCell className="max-w-[150px] sm:max-w-xs truncate text-muted-foreground"> 
                         {tip.message || <span className="italic">No message</span>}
                       </TableCell>
                       <TableCell className="text-right text-sm text-muted-foreground">
@@ -267,3 +264,4 @@ function StatCard({ title, value, icon, delay }: { title: string; value: string;
     </Card>
   );
 }
+
