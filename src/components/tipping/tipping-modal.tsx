@@ -20,22 +20,23 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { suggestTipMessage, type SuggestTipMessageInput } from '@/ai/flows/suggest-tip-message';
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from '@/hooks/use-auth';
-import { getFunctions, httpsCallable } from 'firebase/functions';
+// Import getFunctions and httpsCallable if you intend to use onCall functions elsewhere
+// For direct HTTP, use fetch or axios
 import { Loader2, Wand2, Gift, CheckCircle, AlertTriangle } from 'lucide-react';
 import Image from 'next/image';
-import { app as firebaseApp } from '@/lib/firebase'; // Import initialized Firebase app
+import axios from 'axios'; // Import axios for direct HTTP calls
 
 interface TippingModalProps {
   creator: Creator;
 }
 
 const presetAmounts = [50, 100, 250, 500];
-const functions = getFunctions(firebaseApp);
-const sendTipViaMpesaFunction = httpsCallable(functions, 'sendTipViaMpesa');
+// The direct URL to your onRequest Firebase Function
+const sendTipViaMpesaFunctionUrl = "https://us-central1-tipkesho-b8e63.cloudfunctions.net/sendTipViaMpesa";
 
 
 export function TippingModal({ creator }: TippingModalProps) {
-  const { user: authUser, loading: authLoading } = useAuth();
+  const { user: authUser, loading: authLoading, firebaseUser } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [amount, setAmount] = useState<number | string>(presetAmounts[1]);
   const [customAmount, setCustomAmount] = useState<string>('');
@@ -104,7 +105,10 @@ export function TippingModal({ creator }: TippingModalProps) {
     }
     if (!authUser.phoneNumber) {
         toast({ title: "Phone Number Required", description: "Your M-Pesa phone number is needed for STK push. Please update your profile.", variant: "destructive" });
-        // Optionally redirect to profile settings: router.push('/dashboard/settings');
+        return;
+    }
+    if (!firebaseUser) {
+        toast({ title: "Authentication Error", description: "Could not retrieve authentication details. Please sign in again.", variant: "destructive" });
         return;
     }
 
@@ -113,43 +117,47 @@ export function TippingModal({ creator }: TippingModalProps) {
     setErrorDetails(null);
     setCurrentStep("processing_stk");
 
-
     const tipData = {
       toCreatorId: creator.id,
       tipAmount: finalAmount,
       message: message.trim() === '' ? null : message.trim(),
-      tipperPhoneNumber: authUser.phoneNumber, // User's M-Pesa phone for STK Push
+      tipperPhoneNumber: authUser.phoneNumber,
       tipperEmail: authUser.email || null,
       tipperName: authUser.fullName || authUser.username || "Anonymous Tipper",
     };
 
     try {
-      const result: any = await sendTipViaMpesaFunction(tipData);
-      if (result.data.success) {
-        // The function in this case now returns a success message, but the STK push is async.
-        // The user needs to complete payment on their phone.
-        // The UI should reflect "STK Push Sent"
-        toast({ title: "STK Push Sent!", description: result.data.message || "Check your phone to complete the M-Pesa payment."});
-        // setCurrentStep('confirmation'); // Don't go to final confirmation yet, just info about STK push
-        // Keep modal open, or close and show a global toast/notification
-        // For now, let's close the modal and rely on a toast.
-        // A more advanced flow would involve listening for webhook updates or polling.
+      const idToken = await firebaseUser.getIdToken();
+      const response = await axios.post(sendTipViaMpesaFunctionUrl, tipData, {
+        headers: {
+          'Authorization': `Bearer ${idToken}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (response.data.success) {
+        toast({ title: "STK Push Sent!", description: response.data.message || "Check your phone to complete the M-Pesa payment."});
         resetFormAndClose();
       } else {
-        setErrorDetails(result.data.message || "Payment initiation failed.");
+        setErrorDetails(response.data.message || "Payment initiation failed.");
         setCurrentStep('error');
       }
     } catch (error: any) {
       console.error('Error calling sendTipViaMpesa function:', error);
-      setErrorDetails(error.message || "An unknown error occurred while initiating the tip.");
+      let errorMessage = "An unknown error occurred while initiating the tip.";
+      if (error.response && error.response.data && error.response.data.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      setErrorDetails(errorMessage);
       setCurrentStep('error');
     } finally {
       setIsProcessingTip(false);
-      // If not an error that closes modal, might want to revert step from 'processing_stk'
-      if (currentStep === 'processing_stk' && !isOpen) { // if modal was closed by success
-        // do nothing
+      if (currentStep === 'processing_stk' && !isOpen) { 
+        // do nothing if success closed modal
       } else if (currentStep === 'processing_stk') {
-        setCurrentStep('form'); // revert to form if still open and not success/error handled
+        setCurrentStep('form'); 
       }
     }
   };
@@ -252,12 +260,12 @@ export function TippingModal({ creator }: TippingModalProps) {
             </DialogHeader>
             <DialogFooter className="sm:justify-center">
               <Button type="button" variant="outline" onClick={resetFormAndClose} disabled={isProcessingTip}>
-                Cancel
+                Cancel Request
               </Button>
             </DialogFooter>
           </>
         )}
-        {currentStep === 'confirmation' && ( // This step might be less used if we close on STK push sent
+        {currentStep === 'confirmation' && ( 
           <>
             <DialogHeader className="items-center text-center">
               <CheckCircle className="w-16 h-16 text-green-500 mb-4" />
