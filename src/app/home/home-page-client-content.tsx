@@ -1,24 +1,42 @@
 
 "use client";
 
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ArrowRight, Gift, Zap, MessageSquareHeart, Users, Sparkles, Palette, TrendingUp } from "lucide-react"; // Removed Search, HeartHandshake
+import { ArrowRight, Gift, Zap, MessageSquareHeart, Users, Sparkles, Palette, TrendingUp } from "lucide-react"; 
 import Image from "next/image";
 import Link from "next/link";
 import { HowItWorks } from "@/components/home/how-it-works"; 
 import { Testimonials } from "@/components/home/testimonials"; 
 import { FeaturedCreatorsClient } from "./featured-creators-client";
-import { PlatformHighlights } from "@/components/home/platform-highlights"; // New import
+import { PlatformHighlights } from "@/components/home/platform-highlights";
 import type { Creator } from '@/types';
 import { cn } from "@/lib/utils";
+import { useAuth } from '@/hooks/use-auth';
 
 interface HomePageClientContentProps {
   featuredCreatorsData: Creator[];
 }
 
 export function HomePageClientContent({ featuredCreatorsData }: HomePageClientContentProps) {
+  const { user, loading: authLoading } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    // If auth state is not loading, user exists, and profile is complete, redirect to dashboard
+    if (!authLoading && user && user.fullName && user.phoneNumber) {
+      router.push('/dashboard');
+    }
+  }, [user, authLoading, router]);
+
+  // If redirecting, can return null or a loader to prevent brief flash of content
+  if (!authLoading && user && user.fullName && user.phoneNumber) {
+    return null; // Or a loading spinner component
+  }
+
   const features = [
     {
       icon: <Gift className="w-8 h-8 text-primary" />,

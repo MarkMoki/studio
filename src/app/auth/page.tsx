@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, type FormEvent, useEffect, useRef } from "react";
@@ -48,7 +49,7 @@ export default function AuthPage() {
   const [direction, setDirection] = useState(1);
   const [authMethod, setAuthMethod] = useState<AuthMethod>(null);
   
-  const [phoneNumber, setPhoneNumber] = useState(""); // For OTP
+  const [phoneNumber, setPhoneNumber] = useState(""); 
   const [otp, setOtp] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -57,10 +58,9 @@ export default function AuthPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  // Profile completion form states
   const [username, setUsername] = useState("");
   const [fullName, setFullName] = useState("");
-  const [formPhoneNumber, setFormPhoneNumber] = useState(""); // For profile completion form, initialized to empty string
+  const [formPhoneNumber, setFormPhoneNumber] = useState(""); 
   const [profilePicFile, setProfilePicFile] = useState<File | null>(null);
   const [profilePicPreview, setProfilePicPreview] = useState<string | null>(null);
   const [tipHandle, setTipHandle] = useState('');
@@ -89,7 +89,7 @@ export default function AuthPage() {
   const { toast } = useToast();
 
   useEffect(() => {
-    if (!authLoading && user && user.fullName && user.phoneNumber) { // Check for essential profile fields
+    if (!authLoading && user && user.fullName && user.phoneNumber) { 
       router.push("/dashboard");
     } else if (!authLoading && firebaseUser && (!user?.fullName || !user?.phoneNumber) && currentSlide !== 'completeProfile') {
       const fetchUserRoleAndTransition = async () => {
@@ -98,21 +98,21 @@ export default function AuthPage() {
              resolvedUserRole = user.isCreator ? 'creator' : 'supporter';
              setUserRole(resolvedUserRole);
         } else if (!resolvedUserRole) {
-            const userDocRef = doc(db, "users", firebaseUser.uid);
-            const userDocSnap = await getDoc(userDocRef);
-            if(userDocSnap.exists() && userDocSnap.data()?.isCreator !== undefined) {
-                resolvedUserRole = userDocSnap.data()?.isCreator ? 'creator' : 'supporter';
-                setUserRole(resolvedUserRole); 
+            if (firebaseUser.uid) {
+                const userDocRef = doc(db, "users", firebaseUser.uid);
+                const userDocSnap = await getDoc(userDocRef);
+                if(userDocSnap.exists() && userDocSnap.data()?.isCreator !== undefined) {
+                    resolvedUserRole = userDocSnap.data()?.isCreator ? 'creator' : 'supporter';
+                    setUserRole(resolvedUserRole); 
+                }
             }
         }
         
         if(resolvedUserRole) {
             if (firebaseUser.displayName && fullName === "") setFullName(firebaseUser.displayName);
             if (firebaseUser.photoURL && profilePicPreview === null) setProfilePicPreview(firebaseUser.photoURL);
-            // Ensure formPhoneNumber is set from firebaseUser.phoneNumber if available and form field is empty
             if (firebaseUser.phoneNumber && formPhoneNumber === "") setFormPhoneNumber(firebaseUser.phoneNumber);
             else if (user?.phoneNumber && formPhoneNumber === "") setFormPhoneNumber(user.phoneNumber);
-
 
             if (user?.bio && bio === "") setBio(user.bio);
             if (user?.username && username === "") setUsername(user.username);
@@ -120,11 +120,9 @@ export default function AuthPage() {
                 if(user?.tipHandle && tipHandle === "") setTipHandle(user.tipHandle);
                 if(user?.category && category === "") setCategory(user.category);
             }
-
-
             handleNextSlide("completeProfile");
         } else {
-             if (currentSlide !== 'roleSelection') {
+             if (currentSlide !== 'roleSelection' && currentSlide !== 'authMethodSelection') { // Avoid loop if stuck on auth method
                 setCurrentSlide("roleSelection"); 
              }
         }
@@ -139,7 +137,6 @@ export default function AuthPage() {
       if (firebaseUser.displayName && fullName === "") setFullName(firebaseUser.displayName);
       if (firebaseUser.photoURL && profilePicPreview === null) setProfilePicPreview(firebaseUser.photoURL);
       
-      // Prioritize formPhoneNumber if already set (e.g. from OTP step), else use firebaseUser.phoneNumber or user.phoneNumber
       if (formPhoneNumber === "") {
         if (firebaseUser.phoneNumber) setFormPhoneNumber(firebaseUser.phoneNumber);
         else if (user?.phoneNumber) setFormPhoneNumber(user.phoneNumber);
@@ -152,7 +149,7 @@ export default function AuthPage() {
           if(user?.category && category === "") setCategory(user.category);
       }
     }
-  }, [currentSlide, firebaseUser, user, userRole, fullName, profilePicPreview, formPhoneNumber, bio, username, tipHandle, category]);
+  }, [currentSlide, firebaseUser, user, userRole]); // Simplified dependencies
 
 
   const initializeRecaptcha = async () => {
@@ -206,6 +203,7 @@ export default function AuthPage() {
     setIsLoading(true);
     try {
       await signInWithGoogle(userRole);
+      // onAuthStateChanged will handle redirection or profile completion
     } catch (error) {
       toast({ title: "Google Sign-In Failed", description: (error as Error).message, variant: "destructive" });
     } finally {
@@ -231,6 +229,7 @@ export default function AuthPage() {
       } else {
         await signInWithEmailPassword(email, password);
       }
+      // onAuthStateChanged will handle redirection or profile completion
     } catch (error: any) {
       let friendlyMessage = "Authentication failed. Please try again.";
       if (error.code === 'auth/email-already-in-use') {
@@ -272,8 +271,8 @@ export default function AuthPage() {
     } catch (error) {
       toast({ title: "OTP Send Failed", description: (error as Error).message, variant: "destructive" });
       if ((window as any).recaptchaVerifierInstance) (window as any).recaptchaVerifierInstance.clear();
-      setRecaptchaVerifier(undefined); // Reset verifier to allow re-initialization
-      await initializeRecaptcha(); // Re-initialize
+      setRecaptchaVerifier(undefined); 
+      await initializeRecaptcha(); 
     } finally {
       setIsLoading(false);
     }
@@ -290,7 +289,7 @@ export default function AuthPage() {
     setIsLoading(true);
     try {
       await confirmOtp(confirmationResult, otp, userRole);
-      // On success, onAuthStateChanged will trigger, potentially moving to completeProfile
+      // onAuthStateChanged will handle redirection or profile completion
     } catch (error) {
       toast({ title: "OTP Verification Failed", description: (error as Error).message, variant: "destructive" });
     } finally {
@@ -312,7 +311,6 @@ export default function AuthPage() {
         toast({ title: "Error", description: "Authentication or role information missing.", variant: "destructive" });
         return;
     }
-    // Ensure formPhoneNumber is not empty and valid before submission
     if (!formPhoneNumber || !formPhoneNumber.match(/^\+254[17]\d{8}$/)) {
         toast({ title: "Invalid Phone Number", description: "Phone number is required. Format: +2547XXXXXXXX or +2541XXXXXXXX.", variant: "destructive" });
         return;
@@ -325,7 +323,6 @@ export default function AuthPage() {
         toast({ title: "Full Name Required", description: "Please enter your full name.", variant: "destructive" });
         return;
     }
-
 
     const isCreatorProfile = userRole === 'creator';
     if (isCreatorProfile) {
@@ -354,17 +351,22 @@ export default function AuthPage() {
     const profileDataForCompletion: Partial<User> = {
         username: username.trim(),
         fullName: fullName.trim(),
-        phoneNumber: formPhoneNumber, // Guaranteed to be a valid string by validation
+        phoneNumber: formPhoneNumber,
         profilePicUrl: finalProfilePicUrl,
         isCreator: isCreatorProfile,
-        bio: bio.trim() || null, // Send null if bio is empty
+        bio: bio.trim() || null,
         ...(isCreatorProfile && { tipHandle: tipHandle.trim(), category: category }),
     };
+    
+    const cleanedProfileData = Object.fromEntries(
+      Object.entries(profileDataForCompletion).filter(([_, v]) => v !== undefined)
+    ) as Partial<User>;
+
 
     try {
-        await completeUserProfile(profileDataForCompletion, userRole);
+        await completeUserProfile(cleanedProfileData, userRole);
         toast({ title: "Profile Created! 🎉", description: "Welcome to TipKesho!" });
-        // router.push("/dashboard"); // onAuthStateChanged will handle redirection
+        // Redirection is handled by onAuthStateChanged effect and AuthPage's main useEffect
     } catch (error) {
         toast({ title: "Profile Creation Failed", description: (error as Error).message, variant: "destructive" });
     } finally {
