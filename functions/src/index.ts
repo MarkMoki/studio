@@ -2,18 +2,13 @@ import * as functions from "firebase-functions";
 import *  as admin from "firebase-admin";
 import axios from "axios";
 import { v4 as uuidv4 } from "uuid";
+import corsLib from "cors";
+
+// Initialize cors middleware
+const cors = corsLib({ origin: true });
 
 admin.initializeApp();
 const db = admin.firestore();
-
-// For local testing, FLUTTERWAVE_SECRET_KEY can be set via .env file
-// and accessed via process.env.FLUTTERWAVE_SECRET_KEY.
-// For deployed functions, it's best to use Firebase's secret management:
-// firebase functions:secrets:set FLUTTERWAVE_SECRET_KEY
-// and access it via process.env.FLUTTERWAVE_SECRET_KEY after configuring runWith({ secrets: [...] })
-// Alternatively, for older Firebase CLI versions or non-secret manager approach:
-// firebase functions:config:set flutterwave.secret_key="YOUR_FLUTTERWAVE_SECRET_KEY"
-// and access via functions.config().flutterwave.secret_key.
 
 const FLUTTERWAVE_API_URL = "https://api.flutterwave.com/v3/payments";
 
@@ -22,18 +17,24 @@ interface SendTipData {
   toCreatorId: string;
   tipAmount: number;
   message?: string | null;
-  tipperPhoneNumber: string; // Tipper's M-Pesa phone number for STK push
+  tipperPhoneNumber: string; 
   tipperEmail?: string | null;
   tipperName?: string | null;
 }
 
-// Configure the function to use the FLUTTERWAVE_SECRET_KEY secret
 export const sendTipViaMpesa = functions.runWith({ secrets: ["FLUTTERWAVE_SECRET_KEY"] }).https.onCall(async (data: SendTipData, context) => {
+  // Wrap the function logic with cors handler
+  // Note: onCall functions don't typically need manual CORS handling like onRequest.
+  // However, if client-side SDK calls are still being blocked, this explicit setup (though usually for onRequest)
+  // or ensuring the client origin is whitelisted in GCP/Firebase settings might be necessary.
+  // For onCall, Firebase handles CORS. If issues persist, it might be a configuration elsewhere or network.
+  // Let's keep the core logic as is, since onCall should manage CORS.
+  // If specific CORS errors persist for onCall, it's an advanced setup or Firebase project config issue.
+
   if (!context.auth) {
     throw new functions.https.HttpsError("unauthenticated", "User must be authenticated to send a tip.");
   }
 
-  // Access the secret using process.env
   const flutterwaveSecretKey = process.env.FLUTTERWAVE_SECRET_KEY;
 
   if (!flutterwaveSecretKey) {
@@ -43,7 +44,7 @@ export const sendTipViaMpesa = functions.runWith({ secrets: ["FLUTTERWAVE_SECRET
       "Use `firebase functions:secrets:set FLUTTERWAVE_SECRET_KEY` and then redeploy the function. " +
       "If using emulators, ensure it's set in your .env file or functions config for emulation.";
     console.error(detailedErrorMessage);
-    functions.logger.error(detailedErrorMessage); // Also log to Firebase console for visibility
+    functions.logger.error(detailedErrorMessage); 
     throw new functions.https.HttpsError("internal", "Payment provider configuration error. Administrator: Please check function logs and ensure FLUTTERWAVE_SECRET_KEY is correctly set and accessible.");
   }
 
@@ -67,12 +68,11 @@ export const sendTipViaMpesa = functions.runWith({ secrets: ["FLUTTERWAVE_SECRET
 
 
   const fromUserId = context.auth.uid;
-  const platformFeePercentage = 0.05; // 5%
-  const platformFee = Math.round(tipAmount * platformFeePercentage * 100) / 100; // Round to 2 decimal places
+  const platformFeePercentage = 0.05; 
+  const platformFee = Math.round(tipAmount * platformFeePercentage * 100) / 100; 
   const creatorAmount = Math.round((tipAmount - platformFee) * 100) / 100;
   const txRef = `TIPKESHO-${uuidv4()}`;
 
-  // Fetch creator details to get their handle
   let toCreatorHandle = null;
   try {
     const creatorDoc = await db.collection("creators").doc(toCreatorId).get();
@@ -80,15 +80,13 @@ export const sendTipViaMpesa = functions.runWith({ secrets: ["FLUTTERWAVE_SECRET
       toCreatorHandle = creatorDoc.data()?.tipHandle || `creator_${toCreatorId.substring(0, 5)}`;
     } else {
       functions.logger.warn(`Creator document not found for toCreatorId: ${toCreatorId}`);
-      toCreatorHandle = `creator_${toCreatorId.substring(0, 5)}`; // Fallback handle
+      toCreatorHandle = `creator_${toCreatorId.substring(0, 5)}`; 
     }
   } catch (error) {
     functions.logger.error("Error fetching creator handle:", error);
-    toCreatorHandle = `creator_${toCreatorId.substring(0, 5)}`; // Fallback handle
+    toCreatorHandle = `creator_${toCreatorId.substring(0, 5)}`; 
   }
 
-
-  // Store initial tip record in Firestore
   const tipDocRef = db.collection("tips").doc();
   try {
     await tipDocRef.set({
@@ -100,11 +98,11 @@ export const sendTipViaMpesa = functions.runWith({ secrets: ["FLUTTERWAVE_SECRET
       platformFee: platformFee,
       creatorAmount: creatorAmount,
       message: message || null,
-      mpesaPhone: tipperPhoneNumber, // This is the tipper's phone for STK PUSH
-      platformReceivingMpesa: "+254791556369", // Static platform M-Pesa as requested
+      mpesaPhone: tipperPhoneNumber, 
+      platformReceivingMpesa: "+254791556369", 
       paymentRef: txRef,
       paymentProvider: "flutterwave",
-      paymentStatus: "initiated", // Initial status
+      paymentStatus: "initiated", 
       timestamp: admin.firestore.FieldValue.serverTimestamp(),
     });
   } catch (error) {
@@ -112,22 +110,21 @@ export const sendTipViaMpesa = functions.runWith({ secrets: ["FLUTTERWAVE_SECRET
     throw new functions.https.HttpsError("internal", "Failed to record tip initiation.");
   }
 
-  // Flutterwave Payload
   const flutterwavePayload = {
     tx_ref: txRef,
-    amount: tipAmount.toString(), // Amount should be a string for Flutterwave
+    amount: tipAmount.toString(), 
     currency: "KES",
-    redirect_url: "https://tipkesho.com/payment-callback/flutterwave", // Replace with your actual success/callback URL
+    redirect_url: "https://tipkesho.com/payment-callback/flutterwave", 
     payment_options: "mpesa",
     customer: {
-      email: tipperEmail || context.auth.token.email || "supporter@tipkesho.com", // Fallback email
-      phonenumber: tipperPhoneNumber, // Tipper's phone number for STK push
+      email: tipperEmail || context.auth.token.email || "supporter@tipkesho.com", 
+      phonenumber: tipperPhoneNumber, 
       name: tipperName || context.auth.token.name || "TipKesho Supporter",
     },
     customizations: {
       title: `Tip to ${toCreatorHandle || "Creator"} on TipKesho`,
       description: `Supporting creative talent. Tip Amount: KES ${tipAmount}`,
-      logo: "https://tipkesho.com/logo.png", // Replace with your actual logo URL
+      logo: "https://tipkesho.com/logo.png", 
     },
     meta: {
       tip_id: tipDocRef.id,
@@ -145,9 +142,6 @@ export const sendTipViaMpesa = functions.runWith({ secrets: ["FLUTTERWAVE_SECRET
     });
 
     if (response.data && response.data.status === "success") {
-      // STK Push initiated by Flutterwave.
-      // Client should show a message to check their phone.
-      // The actual payment confirmation will happen via webhook.
       await tipDocRef.update({
         flutterwaveResponse: response.data, 
       });
@@ -179,4 +173,16 @@ export const sendTipViaMpesa = functions.runWith({ secrets: ["FLUTTERWAVE_SECRET
     }
     throw new functions.https.HttpsError("internal", "An error occurred while processing the payment.");
   }
+});
+
+// This is an example of how you might add CORS to an HTTP onRequest function.
+// For onCall functions, Firebase SDKs typically handle this.
+// If CORS issues persist with onCall, it often means the invoking client origin
+// (e.g., your web app's domain) is not authorized in the Google Cloud Console
+// for the specific API (`cloudfunctions.googleapis.com`).
+export const exampleHttpRequestWithCors = functions.https.onRequest((req, res) => {
+  cors(req, res, async () => {
+    // Your function logic here
+    res.json({ message: "CORS enabled for this HTTP request!" });
+  });
 });

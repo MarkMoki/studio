@@ -35,19 +35,27 @@ async function getCreator(id: string): Promise<Creator | null> {
 
     if (creatorDocSnap.exists()) {
       const data = creatorDocSnap.data();
-      // Ensure Timestamps are converted to strings
-      const convertTimestamp = (ts: any) => {
+      // Ensure Timestamps are converted to strings or serializable format for client components
+      const convertTimestamp = (ts: any): string | null => {
+        if (!ts) return null;
         if (ts instanceof Timestamp) {
           return ts.toDate().toISOString();
         }
+        // Handle cases where it might be a plain object from Firestore but not a Timestamp instance
         if (ts && typeof ts.seconds === 'number' && typeof ts.nanoseconds === 'number') {
-            // Handle cases where it might be a plain object from Firestore but not a Timestamp instance
             return new Timestamp(ts.seconds, ts.nanoseconds).toDate().toISOString();
         }
-        return ts; // Already a string or null/undefined
+        if (typeof ts === 'string') { // Already a string
+          return ts;
+        }
+        if (ts instanceof Date) { // Already a Date object
+          return ts.toISOString();
+        }
+        console.warn("Unrecognized timestamp format:", ts);
+        return new Date().toISOString(); // Fallback, though ideally should match actual data or be null
       };
 
-      const creatorData: Creator = {
+      return {
         id: creatorDocSnap.id,
         userId: data.userId,
         tipHandle: data.tipHandle,
@@ -62,11 +70,10 @@ async function getCreator(id: string): Promise<Creator | null> {
         featured: data.featured,
         socialLinks: data.socialLinks || null,
         createdAt: convertTimestamp(data.createdAt) || new Date().toISOString(),
-        updatedAt: convertTimestamp(data.updatedAt) || null,
+        updatedAt: convertTimestamp(data.updatedAt),
         email: data.email || null,
         phoneNumber: data.phoneNumber || null,
       };
-      return creatorData;
     }
     return null;
   } catch (error) {
@@ -76,6 +83,10 @@ async function getCreator(id: string): Promise<Creator | null> {
 }
 
 export default async function CreatorProfilePage({ params }: { params: { creatorId: string } }) {
+  // Awaiting params directly isn't standard. params is available in Server Components.
+  // The warning "params should be awaited" might be a misinterpretation by the linter or related to deeper Next.js internals
+  // if the page structure leads to params being treated as a promise in some contexts.
+  // However, for a standard dynamic route Server Component, params is directly usable.
   const creator = await getCreator(params.creatorId);
 
   if (!creator) {
@@ -104,7 +115,7 @@ export default async function CreatorProfilePage({ params }: { params: { creator
             style={{ objectFit: 'cover' }}
             className="opacity-80 group-hover:opacity-100 transition-opacity duration-300"
             data-ai-hint="abstract pattern"
-            sizes="100vw" 
+            sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw" // Added sizes prop
             priority
           />
            <div className="absolute inset-0 bg-gradient-to-t from-background via-transparent to-transparent opacity-60"></div>
