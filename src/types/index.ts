@@ -2,7 +2,7 @@ import type { Timestamp } from 'firebase/firestore';
 
 export interface User {
   id: string; // UID from Firebase Auth
-  username?: string;
+  username?: string | null; // Make all optional fields potentially null
   fullName?: string | null;
   email?: string | null;
   phoneNumber?: string | null;
@@ -10,10 +10,10 @@ export interface User {
   isCreator: boolean;
   bio?: string | null;
   createdAt: Timestamp | Date | string; // Firestore Timestamp on server, Date or string on client
-  updatedAt?: Timestamp | Date | string;
+  updatedAt?: Timestamp | Date | string | null;
   // For creator-specific fields if they complete profile as creator initially
-  tipHandle?: string; 
-  category?: string;
+  tipHandle?: string | null; 
+  category?: string | null;
 }
 
 export interface SocialLink {
@@ -34,9 +34,9 @@ export interface Creator {
   category: string; 
   active: boolean;
   featured: boolean;
-  socialLinks?: SocialLink[];
+  socialLinks?: SocialLink[] | null;
   createdAt: Timestamp | Date | string;
-  updatedAt?: Timestamp | Date | string;
+  updatedAt?: Timestamp | Date | string | null;
   // Denormalized for querying, if needed
   email?: string | null;
   phoneNumber?: string | null;
@@ -45,14 +45,22 @@ export interface Creator {
 export interface Tip {
   id: string; // Firestore document ID
   fromUserId: string; // Firebase Auth UID
-  fromUsername?: string; // Denormalized for display
+  fromUsername?: string | null; // Denormalized for display
   toCreatorId: string; // Firebase Auth UID of creator
-  toCreatorHandle?: string; // Denormalized for display
-  amount: number; // in KES
+  toCreatorHandle?: string | null; // Denormalized for display
+  amount: number; // in KES (original tip amount)
+  platformFee: number; // KES
+  creatorAmount: number; // KES (amount after platform fee)
   message?: string | null;
   timestamp: Timestamp | Date | string; // Firestore Timestamp
-  paymentRef?: string; // e.g., M-Pesa transaction ID (future use)
-  status?: 'pending' | 'successful' | 'failed'; // For payment status (future use)
+  paymentRef?: string | null; // e.g., Flutterwave tx_ref or M-Pesa transaction ID
+  paymentProvider?: 'flutterwave' | 'mpesa_direct' | string; // To identify payment method used
+  paymentStatus: 'initiated' | 'pending_confirmation' | 'successful' | 'failed' | 'refunded' | 'error_initiation' | 'failed_initiation';
+  mpesaPhone?: string | null; // Phone number that received STK or was used for payment
+  platformReceivingMpesa?: string | null; // Platform's M-Pesa for settlement record
+  flutterwaveResponse?: any | null; // To store initial response from Flutterwave
+  flutterwaveError?: any | null; // To store error response from Flutterwave
+  webhookConfirmedAt?: Timestamp | Date | string | null; // When payment was confirmed via webhook
 }
 
 // For useAuth hook, largely mirrors User but ensures ID is present

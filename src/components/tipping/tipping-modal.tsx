@@ -1,7 +1,8 @@
+
 "use client";
 
 import { useState, useEffect, type ChangeEvent } from 'react';
-import type { Creator, Tip } from '@/types';
+import type { Creator, Tip, AuthUser as TipKeshoAuthUser } from '@/types';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -19,16 +20,19 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { suggestTipMessage, type SuggestTipMessageInput } from '@/ai/flows/suggest-tip-message';
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from '@/hooks/use-auth';
-import { db } from '@/lib/firebase';
-import { collection, addDoc, serverTimestamp, doc, runTransaction, Timestamp } from 'firebase/firestore';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 import { Loader2, Wand2, Gift, CheckCircle, AlertTriangle } from 'lucide-react';
 import Image from 'next/image';
+import { app as firebaseApp } from '@/lib/firebase'; // Import initialized Firebase app
 
 interface TippingModalProps {
   creator: Creator;
 }
 
 const presetAmounts = [50, 100, 250, 500];
+const functions = getFunctions(firebaseApp);
+const sendTipViaMpesaFunction = httpsCallable(functions, 'sendTipViaMpesa');
+
 
 export function TippingModal({ creator }: TippingModalProps) {
   const { user: authUser, loading: authLoading } = useAuth();
@@ -39,7 +43,7 @@ export function TippingModal({ creator }: TippingModalProps) {
   const [suggestedMessage, setSuggestedMessage] = useState('');
   const [isSuggesting, setIsSuggesting] = useState(false);
   const [isProcessingTip, setIsProcessingTip] = useState(false);
-  const [currentStep, setCurrentStep] = useState<'form' | 'confirmation' | 'error'>('form');
+  const [currentStep, setCurrentStep] = useState<'form' | 'confirmation' | 'error' | 'processing_stk'>('form');
   const [errorDetails, setErrorDetails] = useState<string | null>(null);
   const { toast } = useToast();
 
@@ -98,47 +102,55 @@ export function TippingModal({ creator }: TippingModalProps) {
        toast({ title: "Invalid Amount", description: "Please enter a valid tip amount.", variant: "destructive" });
       return;
     }
+    if (!authUser.phoneNumber) {
+        toast({ title: "Phone Number Required", description: "Your M-Pesa phone number is needed for STK push. Please update your profile.", variant: "destructive" });
+        // Optionally redirect to profile settings: router.push('/dashboard/settings');
+        return;
+    }
+
 
     setIsProcessingTip(true);
     setErrorDetails(null);
+    setCurrentStep("processing_stk");
+
+
+    const tipData = {
+      toCreatorId: creator.id,
+      tipAmount: finalAmount,
+      message: message.trim() === '' ? null : message.trim(),
+      tipperPhoneNumber: authUser.phoneNumber, // User's M-Pesa phone for STK Push
+      tipperEmail: authUser.email || null,
+      tipperName: authUser.fullName || authUser.username || "Anonymous Tipper",
+    };
 
     try {
-      const newTip: Omit<Tip, 'id' | 'timestamp'> & { timestamp: any } = { 
-        fromUserId: authUser.id,
-        fromUsername: authUser.username || authUser.fullName || 'Anonymous Tipper',
-        toCreatorId: creator.id,
-        toCreatorHandle: creator.tipHandle || null, // Ensure not undefined
-        amount: finalAmount,
-        message: message.trim() === '' ? null : message.trim(), // Set to null if empty
-        paymentRef: `mpesa_sim_${Date.now()}`, 
-        status: 'successful', 
-        timestamp: serverTimestamp(), 
-      };
-      const tipsCollectionRef = collection(db, 'tips');
-      await addDoc(tipsCollectionRef, newTip); // No need to capture tipDocRef if not used
-
-      const creatorDocRef = doc(db, 'creators', creator.id);
-      await runTransaction(db, async (transaction) => {
-        const creatorDoc = await transaction.get(creatorDocRef);
-        if (!creatorDoc.exists()) {
-          throw new Error("Creator document not found!"); // Use new Error
-        }
-        const currentTotalTips = creatorDoc.data().totalTips || 0;
-        const currentTotalAmountReceived = creatorDoc.data().totalAmountReceived || 0;
-        transaction.update(creatorDocRef, {
-          totalTips: currentTotalTips + 1,
-          totalAmountReceived: currentTotalAmountReceived + finalAmount,
-          updatedAt: serverTimestamp(),
-        });
-      });
-      
-      setCurrentStep('confirmation');
-    } catch (error) {
-      console.error('Error processing tip:', error);
-      setErrorDetails((error as Error).message || "An unknown error occurred.");
+      const result: any = await sendTipViaMpesaFunction(tipData);
+      if (result.data.success) {
+        // The function in this case now returns a success message, but the STK push is async.
+        // The user needs to complete payment on their phone.
+        // The UI should reflect "STK Push Sent"
+        toast({ title: "STK Push Sent!", description: result.data.message || "Check your phone to complete the M-Pesa payment."});
+        // setCurrentStep('confirmation'); // Don't go to final confirmation yet, just info about STK push
+        // Keep modal open, or close and show a global toast/notification
+        // For now, let's close the modal and rely on a toast.
+        // A more advanced flow would involve listening for webhook updates or polling.
+        resetFormAndClose();
+      } else {
+        setErrorDetails(result.data.message || "Payment initiation failed.");
+        setCurrentStep('error');
+      }
+    } catch (error: any) {
+      console.error('Error calling sendTipViaMpesa function:', error);
+      setErrorDetails(error.message || "An unknown error occurred while initiating the tip.");
       setCurrentStep('error');
     } finally {
       setIsProcessingTip(false);
+      // If not an error that closes modal, might want to revert step from 'processing_stk'
+      if (currentStep === 'processing_stk' && !isOpen) { // if modal was closed by success
+        // do nothing
+      } else if (currentStep === 'processing_stk') {
+        setCurrentStep('form'); // revert to form if still open and not success/error handled
+      }
     }
   };
 
@@ -153,7 +165,7 @@ export function TippingModal({ creator }: TippingModalProps) {
   };
 
   useEffect(() => {
-    if(isOpen && currentStep !== 'confirmation' && currentStep !== 'error') {
+    if(isOpen && currentStep !== 'confirmation' && currentStep !== 'error' && currentStep !== 'processing_stk') {
       setAmount(presetAmounts[1]);
       setCustomAmount('');
       setMessage('');
@@ -177,7 +189,7 @@ export function TippingModal({ creator }: TippingModalProps) {
           <>
             <DialogHeader>
               <DialogTitle className="text-2xl">Send a Tip to {creator.fullName || creator.tipHandle}</DialogTitle>
-              <DialogDescription>Show your support for their amazing work!</DialogDescription>
+              <DialogDescription>Show your support for their amazing work! Payment via M-Pesa STK Push.</DialogDescription>
             </DialogHeader>
             <div className="grid gap-6 py-4">
               <div className="space-y-2">
@@ -199,7 +211,7 @@ export function TippingModal({ creator }: TippingModalProps) {
                     {isSuggesting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Wand2 className="mr-2 h-4 w-4" />}Suggest
                   </Button>
                 </div>
-                <Textarea id="message" placeholder={`Love your ${creator.category.toLowerCase()} work, ${creator.fullName || creator.tipHandle}!`} value={message} onChange={(e) => setMessage(e.target.value)} rows={4} className="text-base"/>
+                <Textarea id="message" placeholder={`Love your ${creator.category.toLowerCase()} work, ${creator.fullName || creator.tipHandle}!`} value={message} onChange={(e) => setMessage(e.target.value)} rows={3} className="text-base"/>
                 {suggestedMessage && !isSuggesting && (
                   <p className="text-xs text-muted-foreground p-2 bg-secondary/50 rounded-md border border-dashed">
                     <span className="font-semibold">Suggestion:</span> {suggestedMessage}
@@ -207,34 +219,54 @@ export function TippingModal({ creator }: TippingModalProps) {
                 )}
               </div>
               <div>
-                <Label className="text-base">Payment Method</Label>
+                <Label className="text-base">Payment via M-Pesa</Label>
                 <div className="mt-2 flex items-center space-x-2 p-3 border rounded-md bg-secondary/30">
                    <Image src="https://picsum.photos/seed/mpesa-logo/40/25" alt="M-Pesa Logo" width={40} height={25} data-ai-hint="mpesa logo" />
-                  <span className="font-medium">M-Pesa (Simulated)</span>
+                  <span className="font-medium">Your number: {authUser?.phoneNumber || "Not Set"}</span>
                 </div>
-                 <p className="text-xs text-muted-foreground mt-1">Payment processing is simulated for this demo.</p>
+                 <p className="text-xs text-muted-foreground mt-1">An STK Push will be sent to your M-Pesa number to complete the payment.</p>
               </div>
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={resetFormAndClose}>Cancel</Button>
-              <Button type="submit" onClick={handleSubmitTip} className="bg-primary hover:bg-primary/90 text-primary-foreground" disabled={isProcessingTip || authLoading || finalAmount <=0}>
+              <Button 
+                type="submit" 
+                onClick={handleSubmitTip} 
+                className="bg-primary hover:bg-primary/90 text-primary-foreground" 
+                disabled={isProcessingTip || authLoading || finalAmount <=0 || !authUser?.phoneNumber}
+              >
                 {isProcessingTip ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                Proceed to Tip KES {finalAmount > 0 ? finalAmount.toLocaleString() : '0'}
+                Send KES {finalAmount > 0 ? finalAmount.toLocaleString() : '0'}
               </Button>
             </DialogFooter>
           </>
         )}
-        {currentStep === 'confirmation' && (
+        {currentStep === 'processing_stk' && (
+           <>
+            <DialogHeader className="items-center text-center">
+              <Loader2 className="w-16 h-16 text-primary animate-spin mb-4" />
+              <DialogTitle className="text-2xl">Processing Payment...</DialogTitle>
+              <DialogDescription>
+                An STK push is being sent to {authUser?.phoneNumber}. Please check your phone to authorize the M-Pesa payment of KES {finalAmount.toLocaleString()}.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter className="sm:justify-center">
+              <Button type="button" variant="outline" onClick={resetFormAndClose} disabled={isProcessingTip}>
+                Cancel
+              </Button>
+            </DialogFooter>
+          </>
+        )}
+        {currentStep === 'confirmation' && ( // This step might be less used if we close on STK push sent
           <>
             <DialogHeader className="items-center text-center">
               <CheckCircle className="w-16 h-16 text-green-500 mb-4" />
-              <DialogTitle className="text-2xl">Tip Sent Successfully!</DialogTitle>
-              <DialogDescription>Thank you for supporting {creator.fullName || creator.tipHandle}.</DialogDescription>
+              <DialogTitle className="text-2xl">Tip Processed!</DialogTitle>
+              <DialogDescription>
+                Your tip of KES {finalAmount.toLocaleString()} to {creator.fullName || creator.tipHandle} has been processed. Thank you!
+              </DialogDescription>
             </DialogHeader>
-            <div className="py-6 text-center space-y-2">
-              <p className="text-lg">You tipped <span className="font-bold text-primary">KES {finalAmount.toLocaleString()}</span>.</p>
-              {message && (<p className="text-muted-foreground italic">Your message: "{message}"</p>)}
-            </div>
+            {message && (<p className="text-center text-muted-foreground italic">Your message: "{message}"</p>)}
             <DialogFooter className="sm:justify-center">
               <Button type="button" onClick={resetFormAndClose} className="bg-primary hover:bg-primary/90 text-primary-foreground">Done</Button>
             </DialogFooter>

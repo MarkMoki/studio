@@ -3,51 +3,36 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Users collection:
-    // - Any authenticated user can create their own user document.
-    // - Any authenticated user can read any user document (e.g., for creator to see supporter details, or supporters to see limited info of other users if needed by features).
-    // - A user can only update or delete their own document.
+    // Users: Can read, update, delete their own doc. Can create if authenticated.
     match /users/{userId} {
+      allow read, update, delete: if request.auth != null && request.auth.uid == userId;
       allow create: if request.auth != null;
-      allow read: if request.auth != null;
-      allow update, delete: if request.auth != null && request.auth.uid == userId;
     }
 
-    // Creators collection:
-    // - Anyone can read creator profiles (public profiles).
-    // - Only the authenticated user who is the creator can create or update their own creator document.
-    // - The creator document must have a userId field matching the authenticated user's UID.
+    // Creators: Publicly readable. Can create/update their own doc if authenticated and userId matches.
     match /creators/{creatorId} {
-      allow read: if true;
-      allow create: if request.auth != null &&
-                    request.auth.uid == creatorId &&
-                    request.resource.data.userId == request.auth.uid;
-      allow update: if request.auth != null &&
-                    request.auth.uid == creatorId &&
-                    // Disallow changing userId and ensure tipHandle, if being set, is not empty
-                    request.resource.data.userId == resource.data.userId &&
-                    (!('tipHandle' in request.resource.data) || request.resource.data.tipHandle != '');
-      // Delete rule can be added if needed, e.g., allow delete: if request.auth != null && request.auth.uid == creatorId;
+      allow read: if true; // All users (including unauthenticated) can read creator profiles
+      allow create, update: if request.auth != null &&
+                            request.auth.uid == creatorId &&
+                            request.resource.data.userId == request.auth.uid &&
+                            request.resource.data.active == true; // Ensure active field is set on creation/update
+      // No direct delete for now, can be handled by a function or admin
     }
 
-    // Tips collection:
-    // - Only the authenticated sender of the tip can create it.
-    // - The tip document must have a fromUserId field matching the authenticated user's UID.
-    // - A tip can be read by its sender or its receiver (the creator).
+    // Tips:
+    // - Creation is handled by the sendTipViaMpesa cloud function (admin SDK bypasses these client rules for write).
+    // - Therefore, client-side direct `create` is denied.
+    // - Users can read tips they sent or received.
     match /tips/{tipId} {
-      allow create: if request.auth != null &&
-                    request.auth.uid == request.resource.data.fromUserId &&
-                    request.resource.data.amount > 0; // Ensure tip amount is positive
-      allow read: if request.auth != null &&
+      allow create: if false; // All tip creation must go through the cloud function
+      allow read: if request.auth != null && 
                   (request.auth.uid == resource.data.fromUserId || request.auth.uid == resource.data.toCreatorId);
-      // Update/Delete for tips are generally not allowed to maintain integrity.
-      // Allow update: if false;
-      // Allow delete: if false;
+      // No direct update/delete for tips from client side for now.
     }
 
-    // Placeholder for future collections if any
-    // match /some_other_collection/{docId} {
-    //   allow read, write: if false; // Default deny
-    // }
+    // Function to check if a user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
   }
 }
