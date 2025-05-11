@@ -21,12 +21,12 @@ export default function DashboardPage() {
     );
   }
 
-  if (!user) {
+  if (!user) { // This check implies user profile might also be incomplete
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] text-center animate-fade-in">
          <AlertTriangle className="h-16 w-16 text-destructive mb-4" />
         <h1 className="text-2xl font-semibold mb-2">Access Denied</h1>
-        <p className="text-muted-foreground mb-6">Please sign in to view your dashboard.</p>
+        <p className="text-muted-foreground mb-6">Please sign in to view your dashboard. If you've just signed up, you might need to complete your profile.</p>
         <Link 
             href="/auth" 
             className={cn(
@@ -34,7 +34,7 @@ export default function DashboardPage() {
                 "bg-primary hover:bg-primary/90 text-primary-foreground transform hover:scale-105 transition-transform"
             )}
         >
-            Sign In
+            Sign In or Complete Profile
         </Link>
       </div>
     );
@@ -64,4 +64,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-

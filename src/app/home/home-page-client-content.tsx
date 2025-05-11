@@ -1,12 +1,12 @@
 
 "use client";
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ArrowRight, Gift, Zap, MessageSquareHeart, Users, Sparkles, Palette, TrendingUp } from "lucide-react"; 
+import { ArrowRight, Gift, Zap, MessageSquareHeart, Users, Sparkles, Palette, TrendingUp, Loader2 } from "lucide-react"; 
 import Image from "next/image";
 import Link from "next/link";
 import { HowItWorks } from "@/components/home/how-it-works"; 
@@ -22,21 +22,33 @@ interface HomePageClientContentProps {
 }
 
 export function HomePageClientContent({ featuredCreatorsData }: HomePageClientContentProps) {
-  const { user, loading: authLoading } = useAuth();
+  const { user, firebaseUser, loading: authLoading } = useAuth();
   const router = useRouter();
+  const [isRedirecting, setIsRedirecting] = useState(true); // Start true to show loader initially
 
   useEffect(() => {
-    // If auth state is not loading, user exists, and profile is complete, redirect to dashboard
-    if (!authLoading && user && user.fullName && user.phoneNumber) {
-      router.push('/dashboard');
+    if (!authLoading) {
+      if (user && user.fullName && user.phoneNumber) { // Fully profiled user
+        router.push('/dashboard');
+        // setIsRedirecting will remain true until navigation occurs
+      } else if (firebaseUser) { // Logged in but profile incomplete
+        router.push('/auth');
+        // setIsRedirecting will remain true
+      } else { // Not logged in, or auth state still resolving but no firebaseUser
+        setIsRedirecting(false); // Allow home page content to render
+      }
     }
-  }, [user, authLoading, router]);
+  }, [user, firebaseUser, authLoading, router]);
 
-  // If redirecting, can return null or a loader to prevent brief flash of content
-  if (!authLoading && user && user.fullName && user.phoneNumber) {
-    return null; // Or a loading spinner component
+  if (authLoading || isRedirecting) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[calc(100vh-10rem)]">
+        <Loader2 className="h-16 w-16 animate-spin text-primary" />
+        <p className="mt-4 text-lg text-muted-foreground">Loading your experience...</p>
+      </div>
+    );
   }
-
+  
   const features = [
     {
       icon: <Gift className="w-8 h-8 text-primary" />,
@@ -288,3 +300,4 @@ export function HomePageClientContent({ featuredCreatorsData }: HomePageClientCo
     </div>
   );
 }
+

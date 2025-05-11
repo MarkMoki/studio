@@ -68,6 +68,7 @@ export default function AuthPage() {
   const [bio, setBio] = useState('');
   
   const [isLoading, setIsLoading] = useState(false);
+  const [isRedirecting, setIsRedirecting] = useState(true); // Used to show loader before redirect
 
   const [recaptchaVerifier, setRecaptchaVerifier] = useState<RecaptchaVerifier | undefined>(undefined);
   const [confirmationResult, setConfirmationResult] = useState<ConfirmationResult | undefined>(undefined);
@@ -89,45 +90,51 @@ export default function AuthPage() {
   const { toast } = useToast();
 
   useEffect(() => {
-    if (!authLoading && user && user.fullName && user.phoneNumber) { 
-      router.push("/dashboard");
-    } else if (!authLoading && firebaseUser && (!user?.fullName || !user?.phoneNumber) && currentSlide !== 'completeProfile') {
-      const fetchUserRoleAndTransition = async () => {
-        let resolvedUserRole = userRole;
-        if (!resolvedUserRole && user?.isCreator !== undefined) {
-             resolvedUserRole = user.isCreator ? 'creator' : 'supporter';
-             setUserRole(resolvedUserRole);
-        } else if (!resolvedUserRole) {
-            if (firebaseUser.uid) {
-                const userDocRef = doc(db, "users", firebaseUser.uid);
-                const userDocSnap = await getDoc(userDocRef);
-                if(userDocSnap.exists() && userDocSnap.data()?.isCreator !== undefined) {
-                    resolvedUserRole = userDocSnap.data()?.isCreator ? 'creator' : 'supporter';
-                    setUserRole(resolvedUserRole); 
-                }
-            }
-        }
-        
-        if(resolvedUserRole) {
-            if (firebaseUser.displayName && fullName === "") setFullName(firebaseUser.displayName);
-            if (firebaseUser.photoURL && profilePicPreview === null) setProfilePicPreview(firebaseUser.photoURL);
-            if (firebaseUser.phoneNumber && formPhoneNumber === "") setFormPhoneNumber(firebaseUser.phoneNumber);
-            else if (user?.phoneNumber && formPhoneNumber === "") setFormPhoneNumber(user.phoneNumber);
+    if (!authLoading) {
+      if (user && user.fullName && user.phoneNumber) { // Fully profiled user
+        router.push("/dashboard");
+        // setIsRedirecting will remain true until navigation actually occurs
+      } else if (firebaseUser && (!user?.fullName || !user?.phoneNumber) && currentSlide !== 'completeProfile') { // Logged in, but profile incomplete
+        const fetchUserRoleAndTransition = async () => {
+          let resolvedUserRole = userRole;
+          if (!resolvedUserRole && user?.isCreator !== undefined) {
+               resolvedUserRole = user.isCreator ? 'creator' : 'supporter';
+               setUserRole(resolvedUserRole);
+          } else if (!resolvedUserRole) {
+              if (firebaseUser.uid) {
+                  const userDocRef = doc(db, "users", firebaseUser.uid);
+                  const userDocSnap = await getDoc(userDocRef);
+                  if(userDocSnap.exists() && userDocSnap.data()?.isCreator !== undefined) {
+                      resolvedUserRole = userDocSnap.data()?.isCreator ? 'creator' : 'supporter';
+                      setUserRole(resolvedUserRole); 
+                  }
+              }
+          }
+          
+          if(resolvedUserRole) {
+              if (firebaseUser.displayName && fullName === "") setFullName(firebaseUser.displayName);
+              if (firebaseUser.photoURL && profilePicPreview === null) setProfilePicPreview(firebaseUser.photoURL);
+              if (firebaseUser.phoneNumber && formPhoneNumber === "") setFormPhoneNumber(firebaseUser.phoneNumber);
+              else if (user?.phoneNumber && formPhoneNumber === "") setFormPhoneNumber(user.phoneNumber);
 
-            if (user?.bio && bio === "") setBio(user.bio);
-            if (user?.username && username === "") setUsername(user.username);
-            if (resolvedUserRole === 'creator') {
-                if(user?.tipHandle && tipHandle === "") setTipHandle(user.tipHandle);
-                if(user?.category && category === "") setCategory(user.category);
-            }
-            handleNextSlide("completeProfile");
-        } else {
-             if (currentSlide !== 'roleSelection' && currentSlide !== 'authMethodSelection') { // Avoid loop if stuck on auth method
-                setCurrentSlide("roleSelection"); 
-             }
-        }
-      };
-      fetchUserRoleAndTransition();
+              if (user?.bio && bio === "") setBio(user.bio);
+              if (user?.username && username === "") setUsername(user.username);
+              if (resolvedUserRole === 'creator') {
+                  if(user?.tipHandle && tipHandle === "") setTipHandle(user.tipHandle);
+                  if(user?.category && category === "") setCategory(user.category);
+              }
+              handleNextSlide("completeProfile");
+          } else {
+               if (currentSlide !== 'roleSelection' && currentSlide !== 'authMethodSelection') { 
+                  setCurrentSlide("roleSelection"); 
+               }
+          }
+          setIsRedirecting(false); // Allow auth page to render if not redirecting to dashboard
+        };
+        fetchUserRoleAndTransition();
+      } else {
+        setIsRedirecting(false); // Not logged in or already on completeProfile, allow render
+      }
     }
   }, [user, firebaseUser, authLoading, router, currentSlide, userRole, fullName, profilePicPreview, formPhoneNumber, bio, username, tipHandle, category]);
 
@@ -149,7 +156,7 @@ export default function AuthPage() {
           if(user?.category && category === "") setCategory(user.category);
       }
     }
-  }, [currentSlide, firebaseUser, user, userRole]); // Simplified dependencies
+  }, [currentSlide, firebaseUser, user, userRole, fullName, profilePicPreview, formPhoneNumber, bio, username, tipHandle, category]);
 
 
   const initializeRecaptcha = async () => {
@@ -373,6 +380,15 @@ export default function AuthPage() {
         setIsLoading(false);
     }
   };
+
+  if (authLoading || isRedirecting) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[calc(100vh-10rem)]">
+        <Loader2 className="h-16 w-16 animate-spin text-primary" />
+        <p className="mt-4 text-lg text-muted-foreground">Checking your session...</p>
+      </div>
+    );
+  }
 
 
   const renderSlideContent = () => {
