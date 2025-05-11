@@ -52,9 +52,9 @@ export function Navbar() {
         </div>
 
         <nav className="hidden md:flex items-center space-x-4 text-sm font-medium">
-          <Link href="/" className="transition-colors hover:text-primary">Home</Link>
+          {!user && <Link href="/" className="transition-colors hover:text-primary">Home</Link>}
           <Link href="/creators" className="transition-colors hover:text-primary">Explore</Link>
-          {user && user.fullName && user.phoneNumber && ( // only if profile complete
+          {user && user.fullName && user.phoneNumber && (
              <Button variant="link" onClick={handleDashboardNavigation} className="transition-colors hover:text-primary p-0 h-auto">Dashboard</Button>
           )}
         </nav>
@@ -66,16 +66,7 @@ export function Navbar() {
             </Button>
           ) : user ? (
             <>
-              {user.fullName && user.phoneNumber && !user.isCreator && ( // Show if profiled and not a creator
-                <Button 
-                  size="sm" 
-                  variant="outline" 
-                  className="hidden sm:flex bg-accent/10 border-accent text-accent hover:bg-accent hover:text-accent-foreground"
-                  onClick={() => router.push('/creator/onboarding')}
-                >
-                  <Edit3 className="mr-2 h-4 w-4" /> Become a Creator
-                </Button>
-              )}
+              {/* "Become a Creator" CTA Button removed from here */}
               <Button variant="ghost" size="icon" className="rounded-full relative">
                 <Bell className="h-5 w-5" />
                 {/* Placeholder for notification dot */}
@@ -100,22 +91,28 @@ export function Navbar() {
                     </div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={handleDashboardNavigation}>
-                    <LayoutDashboard className="mr-2 h-4 w-4" />
-                    Dashboard
+                  {user.fullName && user.phoneNumber && (
+                    <DropdownMenuItem onClick={handleDashboardNavigation} className="md:hidden">
+                      <LayoutDashboard className="mr-2 h-4 w-4" />
+                      Dashboard
+                    </DropdownMenuItem>
+                  )}
+                  <DropdownMenuItem onClick={() => router.push('/creators')} className="md:hidden">
+                    <Users className="mr-2 h-4 w-4" />
+                    Explore
                   </DropdownMenuItem>
                    <DropdownMenuItem onClick={() => router.push(user.isCreator ? '/creator/settings' : '/dashboard/settings')}>
                     <UserCircle className="mr-2 h-4 w-4" />
                     Profile Settings
                   </DropdownMenuItem>
                   {!user.isCreator && user.fullName && user.phoneNumber && (
-                     <DropdownMenuItem className="sm:hidden" onClick={() => router.push('/creator/onboarding')}>
+                     <DropdownMenuItem className="sm:hidden" onClick={() => router.push('/creator/onboarding')}> {/* Kept sm:hidden for mobile-specific logic consistency */}
                         <Edit3 className="mr-2 h-4 w-4" /> Become a Creator
                      </DropdownMenuItem>
                   )}
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={signOut}>
-                    <LogIn className="mr-2 h-4 w-4" /> {/* Using LogIn icon for sign out as per original */}
+                    <LogIn className="mr-2 h-4 w-4" />
                     Sign Out
                   </DropdownMenuItem>
                 </DropdownMenuContent>
@@ -152,3 +149,4 @@ export function Navbar() {
     </header>
   );
 }
+
