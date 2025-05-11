@@ -12,6 +12,7 @@ import type { Creator } from "@/types";
 import { useEffect, useState } from "react";
 import { db } from '@/lib/firebase';
 import { collection, query, where, orderBy, limit, getDocs } from 'firebase/firestore';
+import { ActivityFeed } from "@/components/dashboard/activity-feed";
 
 const categoryIcons: { [key: string]: React.ReactNode } = {
   Art: <Palette className="w-4 h-4" />,
@@ -64,19 +65,18 @@ export default function SupporterDashboardPage() {
                 const q = query(
                     creatorsRef,
                     where('active', '==', true),
-                    orderBy('featured', 'desc'),
+                    // orderBy('featured', 'desc'), // Removed for broader suggestions
                     orderBy('totalAmountReceived', 'desc'),
                     limit(3) 
                 );
                 const querySnapshot = await getDocs(q);
                 const fetchedCreators: Creator[] = [];
                 querySnapshot.forEach((doc) => {
-                  // Ensure the suggested creator is not the user themselves (if they were also a creator somehow)
-                  if (doc.id !== user.id) {
+                  if (doc.id !== user.id) { // Ensure not suggesting self if somehow possible
                     fetchedCreators.push({ id: doc.id, ...doc.data() } as Creator);
                   }
                 });
-                setSuggestedCreators(fetchedCreators.slice(0,3)); // Ensure only 3 are taken even if one was self
+                setSuggestedCreators(fetchedCreators.slice(0,3)); 
             } catch (error) {
                 console.error("Error fetching suggested creators:", error);
             } finally {
@@ -85,7 +85,8 @@ export default function SupporterDashboardPage() {
         };
         fetchSuggestedCreators();
     } else {
-      setLoadingSuggested(false); // Not a supporter or no user, so not loading
+      setLoadingSuggested(false); 
+      setSuggestedCreators([]);
     }
   }, [user]); 
 
@@ -99,7 +100,9 @@ export default function SupporterDashboardPage() {
     );
   }
 
-  if (!user) return null;
+  // AppRouterRedirect handles this, but as a fallback.
+  if (!user || user.isCreator || !user.fullName || !user.phoneNumber) return null;
+
 
   return (
     <div className="space-y-8 animate-fade-in">
@@ -129,20 +132,26 @@ export default function SupporterDashboardPage() {
         <StatCard title="Creators Supported" value={supportedCreatorsCount.toLocaleString()} icon={<Users className="h-6 w-6 text-primary"/>} />
       </section>
 
-      <section className="animate-slide-up" style={{animationDelay: '0.2s'}}>
-        <Card className="shadow-lg">
-          <CardHeader>
-            <CardTitle className="text-2xl">Recent Tips You&apos;ve Sent</CardTitle>
-            <CardDescription>A quick look at your latest support.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <MyTipsList userId={user.id} />
-          </CardContent>
-           <CardFooter>
-            <Button variant="link" asChild className="text-primary"><Link href="/dashboard/tips">View All My Tips</Link></Button>
-          </CardFooter>
-        </Card>
-      </section>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <section className="lg:col-span-2 animate-slide-up" style={{animationDelay: '0.2s'}}>
+            <Card className="shadow-lg h-full">
+            <CardHeader>
+                <CardTitle className="text-2xl">Recent Tips You&apos;ve Sent</CardTitle>
+                <CardDescription>A quick look at your latest support.</CardDescription>
+            </CardHeader>
+            <CardContent>
+                <MyTipsList userId={user.id} />
+            </CardContent>
+            <CardFooter>
+                <Button variant="link" asChild className="text-primary"><Link href="/dashboard/tips">View All My Tips</Link></Button>
+            </CardFooter>
+            </Card>
+        </section>
+        <section className="lg:col-span-1 animate-slide-up" style={{animationDelay: '0.25s'}}>
+          <ActivityFeed />
+        </section>
+      </div>
+
 
       <section className="animate-slide-up" style={{animationDelay: '0.3s'}}>
         <Card className="shadow-lg">
@@ -165,7 +174,7 @@ export default function SupporterDashboardPage() {
                        <Image 
                           src={creator.profilePicUrl || `https://picsum.photos/seed/${creator.id}/200/150`} 
                           alt={creator.fullName || creator.tipHandle || ""} 
-                          data-ai-hint={creator.profilePicUrl ? "profile creator" : "abstract landscape"}
+                          data-ai-hint={creator.profilePicUrl ? "profile creator" : "abstract pattern"}
                           width={200} height={150} 
                           className="w-full h-32 object-cover group-hover:scale-105 transition-transform"
                        />
@@ -195,7 +204,7 @@ export default function SupporterDashboardPage() {
           </CardFooter>
         </Card>
       </section>
-       {!user.isCreator && user.fullName && user.phoneNumber && ( // Ensure profile is complete before showing this
+       {!user.isCreator && user.fullName && user.phoneNumber && ( 
           <section className="text-center py-6 animate-slide-up" style={{animationDelay: '0.4s'}}>
             <Card className="shadow-lg p-6 bg-secondary/30">
                 <CardTitle className="text-2xl mb-2 text-primary">Share Your Talents?</CardTitle>
@@ -225,3 +234,5 @@ function StatCard({ title, value, icon }: { title: string; value: string | numbe
     </Card>
   );
 }
+
+    
