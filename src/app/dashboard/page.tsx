@@ -2,24 +2,16 @@
 "use client";
 
 import { useAuth } from "@/hooks/use-auth";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { Loader2, Gift, Users, Sparkles, ArrowRight, Palette, Music, Drama, Mic2 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
-import { MyTipsList } from "@/components/dashboard/my-tips-list"; // Can show a snippet here
-import { cn } from "@/lib/utils";
+import { MyTipsList } from "@/components/dashboard/my-tips-list";
 import Image from "next/image";
-import type { Creator } from "@/types"; // For suggested creators
+import type { Creator } from "@/types";
 import { useEffect, useState } from "react";
 import { db } from '@/lib/firebase';
 import { collection, query, where, orderBy, limit, getDocs } from 'firebase/firestore';
-
-
-const mockSuggestedCreators: Partial<Creator>[] = [
-    { id: 'sugg1', fullName: 'Artistic Alice', tipHandle: '@ArtAlice', category: 'Art', profilePicUrl: 'https://picsum.photos/seed/sugg_alice/100/100', dataAiHint: "female artist" },
-    { id: 'sugg2', fullName: 'Musical Mike', tipHandle: '@MikeBeats', category: 'Music', profilePicUrl: 'https://picsum.photos/seed/sugg_mike/100/100', dataAiHint: "male musician" },
-    { id: 'sugg3', fullName: 'Dancing Diana', tipHandle: '@DianaDances', category: 'Dance', profilePicUrl: 'https://picsum.photos/seed/sugg_diana/100/100', dataAiHint: "female dancer" },
-];
 
 const categoryIcons: { [key: string]: React.ReactNode } = {
   Art: <Palette className="w-4 h-4" />,
@@ -34,6 +26,8 @@ export default function SupporterDashboardPage() {
   const [recentTipsCount, setRecentTipsCount] = useState(0);
   const [totalTippedAmount, setTotalTippedAmount] = useState(0);
   const [supportedCreatorsCount, setSupportedCreatorsCount] = useState(0);
+  const [suggestedCreators, setSuggestedCreators] = useState<Creator[]>([]);
+  const [loadingSuggested, setLoadingSuggested] = useState(true);
 
   useEffect(() => {
     if (user && !user.isCreator) {
@@ -61,6 +55,40 @@ export default function SupporterDashboardPage() {
     }
   }, [user]);
 
+  useEffect(() => {
+    if (user && !user.isCreator) { 
+        const fetchSuggestedCreators = async () => {
+            setLoadingSuggested(true);
+            try {
+                const creatorsRef = collection(db, 'creators');
+                const q = query(
+                    creatorsRef,
+                    where('active', '==', true),
+                    orderBy('featured', 'desc'),
+                    orderBy('totalAmountReceived', 'desc'),
+                    limit(3) 
+                );
+                const querySnapshot = await getDocs(q);
+                const fetchedCreators: Creator[] = [];
+                querySnapshot.forEach((doc) => {
+                  // Ensure the suggested creator is not the user themselves (if they were also a creator somehow)
+                  if (doc.id !== user.id) {
+                    fetchedCreators.push({ id: doc.id, ...doc.data() } as Creator);
+                  }
+                });
+                setSuggestedCreators(fetchedCreators.slice(0,3)); // Ensure only 3 are taken even if one was self
+            } catch (error) {
+                console.error("Error fetching suggested creators:", error);
+            } finally {
+                setLoadingSuggested(false);
+            }
+        };
+        fetchSuggestedCreators();
+    } else {
+      setLoadingSuggested(false); // Not a supporter or no user, so not loading
+    }
+  }, [user]); 
+
 
   if (authLoading) {
     return (
@@ -71,9 +99,7 @@ export default function SupporterDashboardPage() {
     );
   }
 
-  // This page should only be for supporters. Creator guard is in layout.
-  // Profile completion guard is also in layout/AppRouterRedirect.
-  if (!user) return null; // Handled by layout/redirect
+  if (!user) return null;
 
   return (
     <div className="space-y-8 animate-fade-in">
@@ -110,7 +136,7 @@ export default function SupporterDashboardPage() {
             <CardDescription>A quick look at your latest support.</CardDescription>
           </CardHeader>
           <CardContent>
-            <MyTipsList userId={user.id} /> {/* MyTipsList already fetches and displays */}
+            <MyTipsList userId={user.id} />
           </CardContent>
            <CardFooter>
             <Button variant="link" asChild className="text-primary"><Link href="/dashboard/tips">View All My Tips</Link></Button>
@@ -125,29 +151,40 @@ export default function SupporterDashboardPage() {
             <CardDescription>Check out these talented individuals you might like.</CardDescription>
           </CardHeader>
           <CardContent className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {mockSuggestedCreators.map((creator) => (
-              <Link key={creator.id} href={`/creators/${creator.id}`} legacyBehavior>
-              <a className="block group">
-                <Card className="overflow-hidden hover:shadow-xl transition-shadow h-full">
-                  <CardHeader className="p-0">
-                     <Image 
-                        src={creator.profilePicUrl || `https://picsum.photos/seed/${creator.id}/200/150`} 
-                        alt={creator.fullName || ""} 
-                        data-ai-hint={creator.dataAiHint || "profile creator"}
-                        width={200} height={150} 
-                        className="w-full h-32 object-cover group-hover:scale-105 transition-transform"
-                     />
-                  </CardHeader>
-                  <CardContent className="p-4">
-                    <CardTitle className="text-lg mb-1 group-hover:text-primary transition-colors">{creator.fullName}</CardTitle>
-                    <CardDescription className="text-xs text-muted-foreground flex items-center gap-1">
-                        {categoryIcons[creator.category || 'Default']} {creator.category}
-                    </CardDescription>
-                  </CardContent>
-                </Card>
-              </a>
-              </Link>
-            ))}
+            {loadingSuggested ? (
+              <div className="col-span-1 sm:col-span-2 lg:col-span-3 flex justify-center items-center py-10">
+                <Loader2 className="h-8 w-8 animate-spin text-primary"/>
+                <p className="ml-2 text-muted-foreground">Loading suggestions...</p>
+              </div>
+            ) : suggestedCreators.length > 0 ? (
+              suggestedCreators.map((creator) => (
+                <Link key={creator.id} href={`/creators/${creator.id}`} legacyBehavior>
+                <a className="block group">
+                  <Card className="overflow-hidden hover:shadow-xl transition-shadow h-full">
+                    <CardHeader className="p-0">
+                       <Image 
+                          src={creator.profilePicUrl || `https://picsum.photos/seed/${creator.id}/200/150`} 
+                          alt={creator.fullName || creator.tipHandle || ""} 
+                          data-ai-hint={creator.profilePicUrl ? "profile creator" : "abstract landscape"}
+                          width={200} height={150} 
+                          className="w-full h-32 object-cover group-hover:scale-105 transition-transform"
+                       />
+                    </CardHeader>
+                    <CardContent className="p-4">
+                      <CardTitle className="text-lg mb-1 group-hover:text-primary transition-colors">{creator.fullName || creator.tipHandle}</CardTitle>
+                      <CardDescription className="text-xs text-muted-foreground flex items-center gap-1">
+                          {categoryIcons[creator.category] || categoryIcons.Default} {creator.category}
+                      </CardDescription>
+                    </CardContent>
+                  </Card>
+                </a>
+                </Link>
+              ))
+            ) : (
+              <div className="col-span-1 sm:col-span-2 lg:col-span-3 text-center py-10">
+                <p className="text-muted-foreground">No suggested creators at the moment. <Link href="/creators" className="text-primary hover:underline">Explore all creators</Link>.</p>
+              </div>
+            )}
           </CardContent>
           <CardFooter>
             <Button asChild variant="default" className="bg-accent hover:bg-accent/90 text-accent-foreground">
@@ -158,7 +195,7 @@ export default function SupporterDashboardPage() {
           </CardFooter>
         </Card>
       </section>
-       {!user.isCreator && (
+       {!user.isCreator && user.fullName && user.phoneNumber && ( // Ensure profile is complete before showing this
           <section className="text-center py-6 animate-slide-up" style={{animationDelay: '0.4s'}}>
             <Card className="shadow-lg p-6 bg-secondary/30">
                 <CardTitle className="text-2xl mb-2 text-primary">Share Your Talents?</CardTitle>
@@ -175,7 +212,7 @@ export default function SupporterDashboardPage() {
   );
 }
 
-function StatCard({ title, value, icon }: { title: string; value: string; icon: React.ReactNode }) {
+function StatCard({ title, value, icon }: { title: string; value: string | number; icon: React.ReactNode }) {
   return (
     <Card className="shadow-md hover:shadow-lg transition-shadow">
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
