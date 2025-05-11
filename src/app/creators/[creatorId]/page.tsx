@@ -35,6 +35,18 @@ async function getCreator(id: string): Promise<Creator | null> {
 
     if (creatorDocSnap.exists()) {
       const data = creatorDocSnap.data();
+      // Ensure Timestamps are converted to strings
+      const convertTimestamp = (ts: any) => {
+        if (ts instanceof Timestamp) {
+          return ts.toDate().toISOString();
+        }
+        if (ts && typeof ts.seconds === 'number' && typeof ts.nanoseconds === 'number') {
+            // Handle cases where it might be a plain object from Firestore but not a Timestamp instance
+            return new Timestamp(ts.seconds, ts.nanoseconds).toDate().toISOString();
+        }
+        return ts; // Already a string or null/undefined
+      };
+
       const creatorData: Creator = {
         id: creatorDocSnap.id,
         userId: data.userId,
@@ -49,9 +61,8 @@ async function getCreator(id: string): Promise<Creator | null> {
         active: data.active,
         featured: data.featured,
         socialLinks: data.socialLinks || null,
-        // Convert Timestamps to ISO strings
-        createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate().toISOString() : (data.createdAt || new Date().toISOString()),
-        updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate().toISOString() : (data.updatedAt || null),
+        createdAt: convertTimestamp(data.createdAt) || new Date().toISOString(),
+        updatedAt: convertTimestamp(data.updatedAt) || null,
         email: data.email || null,
         phoneNumber: data.phoneNumber || null,
       };
@@ -93,6 +104,7 @@ export default async function CreatorProfilePage({ params }: { params: { creator
             style={{ objectFit: 'cover' }}
             className="opacity-80 group-hover:opacity-100 transition-opacity duration-300"
             data-ai-hint="abstract pattern"
+            sizes="100vw" 
             priority
           />
            <div className="absolute inset-0 bg-gradient-to-t from-background via-transparent to-transparent opacity-60"></div>
@@ -124,8 +136,8 @@ export default async function CreatorProfilePage({ params }: { params: { creator
               <h3 className="text-xl font-semibold mb-3 text-center md:text-left">Follow Me</h3>
               <div className="flex justify-center md:justify-start flex-wrap gap-3">
                 {creator.socialLinks.map((link) => (
-                  <Button key={link.platform + link.url} variant="outline" size="icon" asChild className="transform hover:scale-110 hover:border-primary transition-all duration-200 rounded-full">
-                    <a href={link.url} target="_blank" rel="noopener noreferrer" aria-label={`${link.platform} profile`}>
+                  <Button key={link.platform + (link.url || '')} variant="outline" size="icon" asChild className="transform hover:scale-110 hover:border-primary transition-all duration-200 rounded-full">
+                    <a href={link.url || '#'} target="_blank" rel="noopener noreferrer" aria-label={`${link.platform} profile`}>
                       {socialIcons[link.platform] || <LinkIcon className="w-5 h-5" />}
                     </a>
                   </Button>

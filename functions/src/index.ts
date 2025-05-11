@@ -6,13 +6,16 @@ import { v4 as uuidv4 } from "uuid";
 admin.initializeApp();
 const db = admin.firestore();
 
-// Ensure FLUTTERWAVE_SECRET_KEY is set in Firebase Functions environment configuration
-// You can set this using the Firebase CLI:
+// For local testing, FLUTTERWAVE_SECRET_KEY can be set via .env file
+// and accessed via process.env.FLUTTERWAVE_SECRET_KEY.
+// For deployed functions, it's best to use Firebase's secret management:
+// firebase functions:secrets:set FLUTTERWAVE_SECRET_KEY
+// and access it via process.env.FLUTTERWAVE_SECRET_KEY after configuring runWith({ secrets: [...] })
+// Alternatively, for older Firebase CLI versions or non-secret manager approach:
 // firebase functions:config:set flutterwave.secret_key="YOUR_FLUTTERWAVE_SECRET_KEY"
-// For local testing, you might need to use a .env file and functions.config() will simulate this.
+// and access via functions.config().flutterwave.secret_key.
 
 const FLUTTERWAVE_API_URL = "https://api.flutterwave.com/v3/payments";
-const FLUTTERWAVE_SECRET_KEY = functions.config().flutterwave?.secret_key || process.env.FLUTTERWAVE_SECRET_KEY;
 
 
 interface SendTipData {
@@ -24,13 +27,24 @@ interface SendTipData {
   tipperName?: string | null;
 }
 
-export const sendTipViaMpesa = functions.https.onCall(async (data: SendTipData, context) => {
+// Configure the function to use the FLUTTERWAVE_SECRET_KEY secret
+export const sendTipViaMpesa = functions.runWith({ secrets: ["FLUTTERWAVE_SECRET_KEY"] }).https.onCall(async (data: SendTipData, context) => {
   if (!context.auth) {
     throw new functions.https.HttpsError("unauthenticated", "User must be authenticated to send a tip.");
   }
-  if (!FLUTTERWAVE_SECRET_KEY) {
-    console.error("Flutterwave secret key is not configured.");
-    throw new functions.https.HttpsError("internal", "Payment provider configuration error.");
+
+  // Access the secret using process.env
+  const flutterwaveSecretKey = process.env.FLUTTERWAVE_SECRET_KEY;
+
+  if (!flutterwaveSecretKey) {
+    const detailedErrorMessage = "CRITICAL: Flutterwave secret key is NOT configured. " +
+      "This function cannot operate without it. " +
+      "Ensure 'FLUTTERWAVE_SECRET_KEY' is set as a secret in Firebase Functions. " +
+      "Use `firebase functions:secrets:set FLUTTERWAVE_SECRET_KEY` and then redeploy the function. " +
+      "If using emulators, ensure it's set in your .env file or functions config for emulation.";
+    console.error(detailedErrorMessage);
+    functions.logger.error(detailedErrorMessage); // Also log to Firebase console for visibility
+    throw new functions.https.HttpsError("internal", "Payment provider configuration error. Administrator: Please check function logs and ensure FLUTTERWAVE_SECRET_KEY is correctly set and accessible.");
   }
 
   const { toCreatorId, tipAmount, message, tipperPhoneNumber, tipperEmail, tipperName } = data;
@@ -125,7 +139,7 @@ export const sendTipViaMpesa = functions.https.onCall(async (data: SendTipData, 
   try {
     const response = await axios.post(FLUTTERWAVE_API_URL, flutterwavePayload, {
       headers: {
-        Authorization: `Bearer ${FLUTTERWAVE_SECRET_KEY}`,
+        Authorization: `Bearer ${flutterwaveSecretKey}`,
         "Content-Type": "application/json",
       },
     });
@@ -134,10 +148,8 @@ export const sendTipViaMpesa = functions.https.onCall(async (data: SendTipData, 
       // STK Push initiated by Flutterwave.
       // Client should show a message to check their phone.
       // The actual payment confirmation will happen via webhook.
-      // Update Firestore status if needed based on immediate Flutterwave response
-      // (though "initiated" is usually fine until webhook confirms)
       await tipDocRef.update({
-        flutterwaveResponse: response.data, // Store Flutterwave's initial response
+        flutterwaveResponse: response.data, 
       });
       return {
         success: true,
